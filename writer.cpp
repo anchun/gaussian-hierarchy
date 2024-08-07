@@ -145,3 +145,106 @@ void Writer::writeHierarchy(const char* filename, const std::vector<Gaussian>& g
 		compressed
 	);
 }
+
+void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussians)
+{
+	size_t gaussianCount = gaussians.size();
+	std::cout << "writing ply file with " << gaussianCount << " gaussians." << std::endl;
+	// data prepare
+	std::vector<RichPoint> points(gaussianCount);
+	for (size_t i = 0; i < gaussianCount; i++)
+	{
+		const Gaussian& g = gaussians[i];
+		RichPoint& p = points[i];
+		p.position = g.position;
+		p.normal = Eigen::Vector3f(0, 0, 0);
+		for (int j = 0; j < 3; j++)
+			p.shs[j] = g.shs[j];
+		for (int j = 1; j < 16; j++)
+		{
+			p.shs[(j - 1) + 3] = g.shs[j * 3 + 0];
+			p.shs[(j - 1) + 18] = g.shs[j * 3 + 1];
+			p.shs[(j - 1) + 33] = g.shs[j * 3 + 2];
+		}
+		p.opacity = log(g.opacity / (1 - g.opacity));
+		p.scale = g.scale.array().log();
+		p.rotation[0] = g.rotation[0];
+		p.rotation[1] = g.rotation[1];
+		p.rotation[2] = g.rotation[2];
+		p.rotation[3] = g.rotation[3];
+	}
+	
+	std::ofstream outfile(filename, std::ios_base::binary);
+	if (!outfile.good())
+		throw std::runtime_error("File not created!");
+
+	outfile << "ply" << std::endl;
+	outfile << "format binary_little_endian 1.0" << std::endl;
+	outfile << "element vertex " << gaussianCount << std::endl;
+	outfile << "property float x" << std::endl;
+	outfile << "property float y" << std::endl;
+	outfile << "property float z" << std::endl;
+	outfile << "property float nx" << std::endl;
+	outfile << "property float ny" << std::endl;
+	outfile << "property float nz" << std::endl;
+	outfile << "property float f_dc_0" << std::endl;
+	outfile << "property float f_dc_1" << std::endl;
+	outfile << "property float f_dc_2" << std::endl;
+	outfile << "property float f_rest_0" << std::endl;
+	outfile << "property float f_rest_1" << std::endl;
+	outfile << "property float f_rest_2" << std::endl;
+	outfile << "property float f_rest_3" << std::endl;
+	outfile << "property float f_rest_4" << std::endl;
+	outfile << "property float f_rest_5" << std::endl;
+	outfile << "property float f_rest_6" << std::endl;
+	outfile << "property float f_rest_7" << std::endl;
+	outfile << "property float f_rest_8" << std::endl;
+	outfile << "property float f_rest_9" << std::endl;
+	outfile << "property float f_rest_10" << std::endl;
+	outfile << "property float f_rest_11" << std::endl;
+	outfile << "property float f_rest_12" << std::endl;
+	outfile << "property float f_rest_13" << std::endl;
+	outfile << "property float f_rest_14" << std::endl;
+	outfile << "property float f_rest_15" << std::endl;
+	outfile << "property float f_rest_16" << std::endl;
+	outfile << "property float f_rest_17" << std::endl;
+	outfile << "property float f_rest_18" << std::endl;
+	outfile << "property float f_rest_19" << std::endl;
+	outfile << "property float f_rest_20" << std::endl;
+	outfile << "property float f_rest_21" << std::endl;
+	outfile << "property float f_rest_22" << std::endl;
+	outfile << "property float f_rest_23" << std::endl;
+	outfile << "property float f_rest_24" << std::endl;
+	outfile << "property float f_rest_25" << std::endl;
+	outfile << "property float f_rest_26" << std::endl;
+	outfile << "property float f_rest_27" << std::endl;
+	outfile << "property float f_rest_28" << std::endl;
+	outfile << "property float f_rest_29" << std::endl;
+	outfile << "property float f_rest_30" << std::endl;
+	outfile << "property float f_rest_31" << std::endl;
+	outfile << "property float f_rest_32" << std::endl;
+	outfile << "property float f_rest_33" << std::endl;
+	outfile << "property float f_rest_34" << std::endl;
+	outfile << "property float f_rest_35" << std::endl;
+	outfile << "property float f_rest_36" << std::endl;
+	outfile << "property float f_rest_37" << std::endl;
+	outfile << "property float f_rest_38" << std::endl;
+	outfile << "property float f_rest_39" << std::endl;
+	outfile << "property float f_rest_40" << std::endl;
+	outfile << "property float f_rest_41" << std::endl;
+	outfile << "property float f_rest_42" << std::endl;
+	outfile << "property float f_rest_43" << std::endl;
+	outfile << "property float f_rest_44" << std::endl;
+	outfile << "property float opacity" << std::endl;
+	outfile << "property float scale_0" << std::endl;
+	outfile << "property float scale_1" << std::endl;
+	outfile << "property float scale_2" << std::endl;
+	outfile << "property float rot_0" << std::endl;
+	outfile << "property float rot_1" << std::endl;
+	outfile << "property float rot_2" << std::endl;
+	outfile << "property float rot_3" << std::endl;
+	outfile << "end_header" << std::endl;
+	outfile.write((char*)points.data(), points.size() * sizeof(RichPoint));
+	outfile.close();
+	std::cout << "writing succeed: " << filename << std::endl;
+}

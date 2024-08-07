@@ -48,6 +48,7 @@ int main(int argc, char* argv[])
 
 	int chunk_count(argc - 5);
 	std::string rootpath(argv[1]);
+	std::string outputpath(argv[4]);
 	if (std::stoi(argv[2]))
 	{
 		for (int chunk_id(0); chunk_id < chunk_count; chunk_id++)
@@ -133,8 +134,16 @@ int main(int argc, char* argv[])
 			root->bounds.minn[3] = 1e9f;
 		}
 
-		Writer::writeHierarchy(
-			(argv[4]), 
-			gaussians, root, true);
+		std::string ext = outputpath.substr(outputpath.size() - 4);
+		if (ext != ".ply") {
+			Writer::writeHierarchy(
+				outputpath.c_str(),
+				gaussians, root, true);
+		}
+		else {
+			Writer::writePly(
+				outputpath.c_str(),
+				gaussians);
+		}
 	}
 }
