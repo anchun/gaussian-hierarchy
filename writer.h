@@ -20,6 +20,7 @@ public:
 	static void writeHierarchy(const char* filename, const std::vector<Gaussian>& gaussian, const ExplicitTreeNode* root, bool compressed = true);
 
 	static void writePly(const char* filename, const std::vector<Gaussian>& gaussian);
+	static void writePlySimple(const char* filename, const std::vector<Gaussian>& gaussian);
 
 	static void makeHierarchy(
 		const std::vector<Gaussian>& gaussians,

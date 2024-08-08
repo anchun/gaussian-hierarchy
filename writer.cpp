@@ -166,7 +166,8 @@ void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussia
 			p.shs[(j - 1) + 18] = g.shs[j * 3 + 1];
 			p.shs[(j - 1) + 33] = g.shs[j * 3 + 2];
 		}
-		p.opacity = log(g.opacity / (1 - g.opacity));
+		float opacity = std::clamp(g.opacity, 0.000001f, 0.999999f);
+		p.opacity = log(opacity / (1 - opacity));
 		p.scale = g.scale.array().log();
 		p.rotation[0] = g.rotation[0];
 		p.rotation[1] = g.rotation[1];
@@ -248,3 +249,53 @@ void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussia
 	outfile.close();
 	std::cout << "writing succeed: " << filename << std::endl;
 }
+
+void Writer::writePlySimple(const char* filename, const std::vector<Gaussian>& gaussians)
+{
+	size_t gaussianCount = gaussians.size();
+	std::cout << "writing simple ply file with " << gaussianCount << " gaussians." << std::endl;
+	// data prepare
+	std::vector<LeastRichPoint> points(gaussianCount);
+	for (size_t i = 0; i < gaussianCount; i++)
+	{
+		const Gaussian& g = gaussians[i];
+		LeastRichPoint& p = points[i];
+		p.position = g.position;
+		for (int j = 0; j < 3; j++)
+			p.shs[j] = g.shs[j];
+		float opacity = std::clamp(g.opacity, 0.000001f, 0.999999f);
+		p.opacity = log(opacity / (1 - opacity));
+		p.scale = g.scale.array().log();
+		p.rotation[0] = g.rotation[0];
+		p.rotation[1] = g.rotation[1];
+		p.rotation[2] = g.rotation[2];
+		p.rotation[3] = g.rotation[3];
+	}
+
+	std::ofstream outfile(filename, std::ios_base::binary);
+	if (!outfile.good())
+		throw std::runtime_error("File not created!");
+
+	outfile << "ply" << std::endl;
+	outfile << "format binary_little_endian 1.0" << std::endl;
+	outfile << "element vertex " << gaussianCount << std::endl;
+	outfile << "property float x" << std::endl;
+	outfile << "property float y" << std::endl;
+	outfile << "property float z" << std::endl;
+	outfile << "property float f_dc_0" << std::endl;
+	outfile << "property float f_dc_1" << std::endl;
+	outfile << "property float f_dc_2" << std::endl;
+	outfile << "property float opacity" << std::endl;
+	outfile << "property float scale_0" << std::endl;
+	outfile << "property float scale_1" << std::endl;
+	outfile << "property float scale_2" << std::endl;
+	outfile << "property float rot_0" << std::endl;
+	outfile << "property float rot_1" << std::endl;
+	outfile << "property float rot_2" << std::endl;
+	outfile << "property float rot_3" << std::endl;
+	outfile << "end_header" << std::endl;
+	outfile.write((char*)points.data(), points.size() * sizeof(LeastRichPoint));
+	outfile.close();
+	std::cout << "writing succeed: " << filename << std::endl;
+}
+

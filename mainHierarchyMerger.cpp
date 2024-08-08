@@ -141,7 +141,7 @@ int main(int argc, char* argv[])
 				gaussians, root, true);
 		}
 		else {
-			Writer::writePly(
+			Writer::writePlySimple(
 				outputpath.c_str(),
 				gaussians);
 		}

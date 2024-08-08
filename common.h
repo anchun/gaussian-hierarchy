@@ -46,6 +46,15 @@ struct LessRichPoint
 	float rotation[4];
 };
 
+struct LeastRichPoint
+{
+	Eigen::Vector3f position;
+	float shs[3];
+	float opacity;
+	Eigen::Vector3f scale;
+	float rotation[4];
+};
+
 struct Gaussian
 {
 	Eigen::Vector3f position;
