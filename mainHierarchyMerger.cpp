@@ -49,44 +49,7 @@ int main(int argc, char* argv[])
 	int chunk_count(argc - 5);
 	std::string rootpath(argv[1]);
 	std::string outputpath(argv[4]);
-	if (std::stoi(argv[2]))
-	{
-		for (int chunk_id(0); chunk_id < chunk_count; chunk_id++)
-		{
-			int argidx(chunk_id + 5);
-			std::cout << "Building hierarchy for chunk " << argv[chunk_id + 5] << std::endl;
-
-			AppearanceFilter filter;
-			std::string inpath(argv[3]);
-			filter.init((inpath + "/" + argv[argidx]).c_str());
-
-			std::vector<Gaussian> gaussians;
-			ExplicitTreeNode *root;
-			Loader::loadPly((rootpath + "/" + argv[argidx] + "/point_cloud/iteration_30000/point_cloud.ply").c_str(), gaussians);
-
-			std::cout << "Generating" << std::endl;
-			PointbasedKdTreeGenerator generator;
-			root = generator.generate(gaussians);
-
-			std::cout << "Merging" << std::endl;
-			ClusterMerger merger;
-			merger.merge(root, gaussians);
-
-			std::cout << "Fixing rotations" << std::endl;
-			RotationAligner::align(root, gaussians);
-
-			std::cout << "Filtering" << std::endl;
-			filter.filter(root, gaussians, 0.0005f, 4.0f);
-
-			std::cout << "Writing" << std::endl;
-
-			Writer::writeHierarchy(
-				(rootpath + "/" + argv[argidx] + "/chunk.hier").c_str(), 
-				gaussians, 
-				root);
-		}
-	}
-	else
+	int sh_degree = std::stoi(argv[2]);
 	{
 		// Read chunk centers
 		std::string inpath(argv[3]);
@@ -141,9 +104,10 @@ int main(int argc, char* argv[])
 				gaussians, root, true);
 		}
 		else {
-			Writer::writePlySimple(
-				outputpath.c_str(),
-				gaussians);
+			if(sh_degree == 0)
+				Writer::writePlySimple(outputpath.c_str(), gaussians);
+			else // default degree 3
+				Writer::writePly(outputpath.c_str(), gaussians);
 		}
 	}
 }

@@ -90,33 +90,88 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 	int count;
 	ss >> dummy >> dummy >> count;
 
+	int property_count = 0;
 	while (std::getline(infile, buff))
+	{
 		if (buff.compare("end_header") == 0)
 			break;
+		property_count++;
+	}
 
 	gaussians.resize(count - skyboxpoints);
 
-	std::vector<RichPoint> points(count);
-	infile.read((char*)points.data(), count * sizeof(RichPoint));
+	if (property_count == sizeof(RichPoint) / sizeof(float)) {
+		std::vector<RichPoint> points(count);
+		infile.read((char*)points.data(), count * sizeof(RichPoint));
 
-	for (int i = 0; i < gaussians.size(); i++)
-	{
-		Gaussian& g = gaussians[i];
-		RichPoint& p = points[skyboxpoints + i];
-
-		g.opacity = sigmoid(p.opacity);
-		g.position = p.position;
-		g.rotation = Eigen::Vector4f(p.rotation[0], p.rotation[1], p.rotation[2], p.rotation[3]).normalized();
-		g.scale = p.scale.array().exp();
-		for (int j = 0; j < 3; j++)
-			g.shs[j] = p.shs[j];
-		for (int j = 1; j < 16; j++)
+		for (int i = 0; i < gaussians.size(); i++)
 		{
-			g.shs[j * 3 + 0] = p.shs[(j - 1) + 3];
-			g.shs[j * 3 + 1] = p.shs[(j - 1) + 18];
-			g.shs[j * 3 + 2] = p.shs[(j - 1) + 33];
+			Gaussian& g = gaussians[i];
+			RichPoint& p = points[skyboxpoints + i];
+
+			g.opacity = sigmoid(p.opacity);
+			g.position = p.position;
+			g.rotation = Eigen::Vector4f(p.rotation[0], p.rotation[1], p.rotation[2], p.rotation[3]).normalized();
+			g.scale = p.scale.array().exp();
+			g.shs.setZero();
+			for (int j = 0; j < 3; j++)
+				g.shs[j] = p.shs[j];
+			for (int j = 1; j < 16; j++)
+			{
+				g.shs[j * 3 + 0] = p.shs[(j - 1) + 3];
+				g.shs[j * 3 + 1] = p.shs[(j - 1) + 18];
+				g.shs[j * 3 + 2] = p.shs[(j - 1) + 33];
+			}
+			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
-		computeCovariance(g.scale, g.rotation, g.covariance);
+	}
+	else if (property_count == sizeof(LessRichPoint) / sizeof(float)) {
+		std::vector<LessRichPoint> points(count);
+		infile.read((char*)points.data(), count * sizeof(LessRichPoint));
+
+		for (int i = 0; i < gaussians.size(); i++)
+		{
+			Gaussian& g = gaussians[i];
+			LessRichPoint& p = points[skyboxpoints + i];
+
+			g.opacity = sigmoid(p.opacity);
+			g.position = p.position;
+			g.rotation = Eigen::Vector4f(p.rotation[0], p.rotation[1], p.rotation[2], p.rotation[3]).normalized();
+			g.scale = p.scale.array().exp();
+			g.shs.setZero();
+			for (int j = 0; j < 3; j++)
+				g.shs[j] = p.shs[j];
+			for (int j = 1; j < 4; j++)
+			{
+				g.shs[j * 3 + 0] = p.shs[(j - 1) + 3];
+				g.shs[j * 3 + 1] = p.shs[(j - 1) + 6];
+				g.shs[j * 3 + 2] = p.shs[(j - 1) + 9];
+			}
+			computeCovariance(g.scale, g.rotation, g.covariance);
+		}
+	}
+	else if (property_count == sizeof(LeastRichPoint) / sizeof(float)) {
+		std::vector<LeastRichPoint> points(count);
+		infile.read((char*)points.data(), count * sizeof(LeastRichPoint));
+
+		for (int i = 0; i < gaussians.size(); i++)
+		{
+			Gaussian& g = gaussians[i];
+			LeastRichPoint& p = points[skyboxpoints + i];
+
+			g.opacity = sigmoid(p.opacity);
+			g.position = p.position;
+			g.rotation = Eigen::Vector4f(p.rotation[0], p.rotation[1], p.rotation[2], p.rotation[3]).normalized();
+			g.scale = p.scale.array().exp();
+			g.shs.setZero();
+			for (int j = 0; j < 3; j++)
+				g.shs[j] = p.shs[j];
+			computeCovariance(g.scale, g.rotation, g.covariance);
+		}
+	}
+	else {
+		std::cout << "Invalid ply files with property_count" << property_count << std::endl;
+		throw std::runtime_error("Invalid ply files!");
 	}
 }
 
