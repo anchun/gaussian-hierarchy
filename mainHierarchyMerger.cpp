@@ -104,10 +104,7 @@ int main(int argc, char* argv[])
 				gaussians, root, true);
 		}
 		else {
-			if(sh_degree == 0)
-				Writer::writePlySimple(outputpath.c_str(), gaussians);
-			else // default degree 3
-				Writer::writePly(outputpath.c_str(), gaussians);
+			Writer::writePly(outputpath.c_str(), gaussians, sh_degree);
 		}
 	}
 }

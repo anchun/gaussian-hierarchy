@@ -146,10 +146,9 @@ void Writer::writeHierarchy(const char* filename, const std::vector<Gaussian>& g
 	);
 }
 
-void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussians)
+void writePlyDegree3(const char* filename, const std::vector<Gaussian>& gaussians)
 {
 	size_t gaussianCount = gaussians.size();
-	std::cout << "writing ply file with " << gaussianCount << " gaussians." << std::endl;
 	// data prepare
 	std::vector<RichPoint> points(gaussianCount);
 	for (size_t i = 0; i < gaussianCount; i++)
@@ -166,8 +165,8 @@ void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussia
 			p.shs[(j - 1) + 18] = g.shs[j * 3 + 1];
 			p.shs[(j - 1) + 33] = g.shs[j * 3 + 2];
 		}
-		float opacity = std::clamp(g.opacity, 0.000001f, 0.999999f);
-		p.opacity = log(opacity / (1 - opacity));
+		double opacity = std::clamp((double)g.opacity, 1e-12, 1.0 - 1e-12);
+		p.opacity = (float)log(opacity / (1 - opacity));
 		p.scale = g.scale.array().log();
 		p.rotation[0] = g.rotation[0];
 		p.rotation[1] = g.rotation[1];
@@ -181,7 +180,7 @@ void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussia
 
 	outfile << "ply" << std::endl;
 	outfile << "format binary_little_endian 1.0" << std::endl;
-	outfile << "element vertex " << gaussianCount << std::endl;
+	outfile << "element vertex " << points.size() << std::endl;
 	outfile << "property float x" << std::endl;
 	outfile << "property float y" << std::endl;
 	outfile << "property float z" << std::endl;
@@ -250,21 +249,27 @@ void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussia
 	std::cout << "writing succeed: " << filename << std::endl;
 }
 
-void Writer::writePlySimple(const char* filename, const std::vector<Gaussian>& gaussians)
+void writePlyDegree1(const char* filename, const std::vector<Gaussian>& gaussians)
 {
 	size_t gaussianCount = gaussians.size();
-	std::cout << "writing simple ply file with " << gaussianCount << " gaussians." << std::endl;
 	// data prepare
-	std::vector<LeastRichPoint> points(gaussianCount);
+	std::vector<LessRichPoint> points(gaussianCount);
 	for (size_t i = 0; i < gaussianCount; i++)
 	{
 		const Gaussian& g = gaussians[i];
-		LeastRichPoint& p = points[i];
+		LessRichPoint& p = points[i];
 		p.position = g.position;
+		p.normal = Eigen::Vector3f(0, 0, 0);
 		for (int j = 0; j < 3; j++)
 			p.shs[j] = g.shs[j];
-		float opacity = std::clamp(g.opacity, 0.000001f, 0.999999f);
-		p.opacity = log(opacity / (1 - opacity));
+		for (int j = 1; j < 4; j++)
+		{
+			p.shs[(j - 1) + 3] = g.shs[j * 3 + 0];
+			p.shs[(j - 1) + 6] = g.shs[j * 3 + 1];
+			p.shs[(j - 1) + 9] = g.shs[j * 3 + 2];
+		}
+		double opacity = std::clamp((double)g.opacity, 1e-12, 1.0 - 1e-12);
+		p.opacity = (float)log(opacity / (1 - opacity));
 		p.scale = g.scale.array().log();
 		p.rotation[0] = g.rotation[0];
 		p.rotation[1] = g.rotation[1];
@@ -278,7 +283,67 @@ void Writer::writePlySimple(const char* filename, const std::vector<Gaussian>& g
 
 	outfile << "ply" << std::endl;
 	outfile << "format binary_little_endian 1.0" << std::endl;
-	outfile << "element vertex " << gaussianCount << std::endl;
+	outfile << "element vertex " << points.size() << std::endl;
+	outfile << "property float x" << std::endl;
+	outfile << "property float y" << std::endl;
+	outfile << "property float z" << std::endl;
+	outfile << "property float nx" << std::endl;
+	outfile << "property float ny" << std::endl;
+	outfile << "property float nz" << std::endl;
+	outfile << "property float f_dc_0" << std::endl;
+	outfile << "property float f_dc_1" << std::endl;
+	outfile << "property float f_dc_2" << std::endl;
+	outfile << "property float f_rest_0" << std::endl;
+	outfile << "property float f_rest_1" << std::endl;
+	outfile << "property float f_rest_2" << std::endl;
+	outfile << "property float f_rest_3" << std::endl;
+	outfile << "property float f_rest_4" << std::endl;
+	outfile << "property float f_rest_5" << std::endl;
+	outfile << "property float f_rest_6" << std::endl;
+	outfile << "property float f_rest_7" << std::endl;
+	outfile << "property float f_rest_8" << std::endl;
+	outfile << "property float opacity" << std::endl;
+	outfile << "property float scale_0" << std::endl;
+	outfile << "property float scale_1" << std::endl;
+	outfile << "property float scale_2" << std::endl;
+	outfile << "property float rot_0" << std::endl;
+	outfile << "property float rot_1" << std::endl;
+	outfile << "property float rot_2" << std::endl;
+	outfile << "property float rot_3" << std::endl;
+	outfile << "end_header" << std::endl;
+	outfile.write((char*)points.data(), points.size() * sizeof(LessRichPoint));
+	outfile.close();
+	std::cout << "writing succeed: " << filename << std::endl;
+}
+
+void writePlyDegree0(const char* filename, const std::vector<Gaussian>& gaussians)
+{
+	size_t gaussianCount = gaussians.size();
+	// data prepare
+	std::vector<LeastRichPoint> points(gaussianCount);
+	for (size_t i = 0; i < gaussianCount; i++)
+	{
+		const Gaussian& g = gaussians[i];
+		LeastRichPoint& p = points[i];
+		p.position = g.position;
+		for (int j = 0; j < 3; j++)
+			p.shs[j] = g.shs[j];
+		double opacity = std::clamp((double)g.opacity, 1e-12, 1.0 - 1e-12);
+		p.opacity = (float)log(opacity / (1 - opacity));
+		p.scale = g.scale.array().log();
+		p.rotation[0] = g.rotation[0];
+		p.rotation[1] = g.rotation[1];
+		p.rotation[2] = g.rotation[2];
+		p.rotation[3] = g.rotation[3];
+	}
+
+	std::ofstream outfile(filename, std::ios_base::binary);
+	if (!outfile.good())
+		throw std::runtime_error("File not created!");
+
+	outfile << "ply" << std::endl;
+	outfile << "format binary_little_endian 1.0" << std::endl;
+	outfile << "element vertex " << points.size() << std::endl;
 	outfile << "property float x" << std::endl;
 	outfile << "property float y" << std::endl;
 	outfile << "property float z" << std::endl;
@@ -299,3 +364,19 @@ void Writer::writePlySimple(const char* filename, const std::vector<Gaussian>& g
 	std::cout << "writing succeed: " << filename << std::endl;
 }
 
+void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussians, std::uint32_t sh_degree)
+{
+	std::cout << "writing ply file with " << gaussians.size() << " gaussians in degree " << sh_degree << std::endl;
+	if (sh_degree == 0) {
+		writePlyDegree0(filename, gaussians);
+	}
+	else if (sh_degree == 1) {
+		writePlyDegree1(filename, gaussians);
+	}
+	else if (sh_degree == 3) {
+		writePlyDegree3(filename, gaussians);
+	}
+	else {
+		std::cout << "not supported degrees:  " << sh_degree << std::endl;
+	}
+}
