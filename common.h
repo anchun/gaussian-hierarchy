@@ -36,7 +36,7 @@ struct RichPoint
 	float rotation[4];
 };
 
-struct LessRichPoint
+struct RichPointDegree1
 {
 	Eigen::Vector3f position;
 	Eigen::Vector3f normal;
@@ -46,7 +46,17 @@ struct LessRichPoint
 	float rotation[4];
 };
 
-struct LeastRichPoint
+struct RichPointDegree0WithNormal
+{
+	Eigen::Vector3f position;
+	Eigen::Vector3f normal;
+	float shs[3];
+	float opacity;
+	Eigen::Vector3f scale;
+	float rotation[4];
+};
+
+struct RichPointDegree0
 {
 	Eigen::Vector3f position;
 	float shs[3];

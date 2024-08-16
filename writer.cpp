@@ -253,11 +253,11 @@ void writePlyDegree1(const char* filename, const std::vector<Gaussian>& gaussian
 {
 	size_t gaussianCount = gaussians.size();
 	// data prepare
-	std::vector<LessRichPoint> points(gaussianCount);
+	std::vector<RichPointDegree1> points(gaussianCount);
 	for (size_t i = 0; i < gaussianCount; i++)
 	{
 		const Gaussian& g = gaussians[i];
-		LessRichPoint& p = points[i];
+		RichPointDegree1& p = points[i];
 		p.position = g.position;
 		p.normal = Eigen::Vector3f(0, 0, 0);
 		for (int j = 0; j < 3; j++)
@@ -311,7 +311,7 @@ void writePlyDegree1(const char* filename, const std::vector<Gaussian>& gaussian
 	outfile << "property float rot_2" << std::endl;
 	outfile << "property float rot_3" << std::endl;
 	outfile << "end_header" << std::endl;
-	outfile.write((char*)points.data(), points.size() * sizeof(LessRichPoint));
+	outfile.write((char*)points.data(), points.size() * sizeof(RichPointDegree1));
 	outfile.close();
 	std::cout << "writing succeed: " << filename << std::endl;
 }
@@ -320,11 +320,11 @@ void writePlyDegree0(const char* filename, const std::vector<Gaussian>& gaussian
 {
 	size_t gaussianCount = gaussians.size();
 	// data prepare
-	std::vector<LeastRichPoint> points(gaussianCount);
+	std::vector<RichPointDegree0> points(gaussianCount);
 	for (size_t i = 0; i < gaussianCount; i++)
 	{
 		const Gaussian& g = gaussians[i];
-		LeastRichPoint& p = points[i];
+		RichPointDegree0& p = points[i];
 		p.position = g.position;
 		for (int j = 0; j < 3; j++)
 			p.shs[j] = g.shs[j];
@@ -359,7 +359,7 @@ void writePlyDegree0(const char* filename, const std::vector<Gaussian>& gaussian
 	outfile << "property float rot_2" << std::endl;
 	outfile << "property float rot_3" << std::endl;
 	outfile << "end_header" << std::endl;
-	outfile.write((char*)points.data(), points.size() * sizeof(LeastRichPoint));
+	outfile.write((char*)points.data(), points.size() * sizeof(RichPointDegree0));
 	outfile.close();
 	std::cout << "writing succeed: " << filename << std::endl;
 }
