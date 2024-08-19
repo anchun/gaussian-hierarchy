@@ -104,7 +104,16 @@ int main(int argc, char* argv[])
 				gaussians, root, true);
 		}
 		else {
-			Writer::writePly(outputpath.c_str(), gaussians, sh_degree);
+			std::vector<Gaussian> gaussians_ply;
+			const float bigLimit = 30.f;
+			for (const Gaussian& g : gaussians) {
+				// strip out big node in leaf for leaf gaussian with bigLimit
+				if (std::max(g.scale.z(), std::max(g.scale.x(), g.scale.y())) > bigLimit)
+					continue;
+				gaussians_ply.emplace_back(g);
+			}
+			
+			Writer::writePly(outputpath.c_str(), gaussians_ply, sh_degree);
 		}
 	}
 }
