@@ -105,6 +105,28 @@ int main(int argc, char* argv[])
 		}
 		else {
 			std::vector<Gaussian> gaussians_ply;
+
+			// for ply also write scaffold
+			std::string scaffold_path = rootpath + "/../scaffold/point_cloud/iteration_30000";
+			std::string txtfile = scaffold_path + "/pc_info.txt";
+			std::string plyfile = scaffold_path + "/point_cloud.ply";
+			std::ifstream scaffoldfile(txtfile.c_str());
+			std::vector<Gaussian> gaussians_sky;
+			if (scaffoldfile.good()) {
+				std::string line;
+				std::getline(scaffoldfile, line);
+				int skyboxpoints = std::atoi(line.c_str());
+				Loader::loadPly(plyfile.c_str(), gaussians_sky);
+				if (gaussians_sky.size() >= skyboxpoints) {
+					for (int i = 0; i < skyboxpoints; i++) {
+						gaussians_ply.emplace_back(gaussians_sky[i]);
+					}
+				}
+			}
+			else {
+				std::cout << "scaffold pc_info.txt not found: " << txtfile << std::endl;
+			}
+			
 			const float bigLimit = 30.f;
 			for (const Gaussian& g : gaussians) {
 				// strip out big node in leaf for leaf gaussian with bigLimit
