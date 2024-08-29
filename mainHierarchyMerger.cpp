@@ -50,6 +50,7 @@ int main(int argc, char* argv[])
 	std::string rootpath(argv[1]);
 	std::string outputpath(argv[4]);
 	int sh_degree = std::stoi(argv[2]);
+	bool writeSky = false;
 	{
 		// Read chunk centers
 		std::string inpath(argv[3]);
@@ -106,25 +107,27 @@ int main(int argc, char* argv[])
 		else {
 			std::vector<Gaussian> gaussians_ply;
 
-			// for ply also write scaffold
-			std::string scaffold_path = rootpath + "/../scaffold/point_cloud/iteration_30000";
-			std::string txtfile = scaffold_path + "/pc_info.txt";
-			std::string plyfile = scaffold_path + "/point_cloud.ply";
-			std::ifstream scaffoldfile(txtfile.c_str());
-			std::vector<Gaussian> gaussians_sky;
-			if (scaffoldfile.good()) {
-				std::string line;
-				std::getline(scaffoldfile, line);
-				int skyboxpoints = std::atoi(line.c_str());
-				Loader::loadPly(plyfile.c_str(), gaussians_sky);
-				if (gaussians_sky.size() >= skyboxpoints) {
-					for (int i = 0; i < skyboxpoints; i++) {
-						gaussians_ply.emplace_back(gaussians_sky[i]);
+			// for sky
+			if (writeSky) {
+				std::string scaffold_path = rootpath + "/../scaffold/point_cloud/iteration_30000";
+				std::string txtfile = scaffold_path + "/pc_info.txt";
+				std::string plyfile = scaffold_path + "/point_cloud.ply";
+				std::ifstream scaffoldfile(txtfile.c_str());
+				std::vector<Gaussian> gaussians_sky;
+				if (scaffoldfile.good()) {
+					std::string line;
+					std::getline(scaffoldfile, line);
+					int skyboxpoints = std::atoi(line.c_str());
+					Loader::loadPly(plyfile.c_str(), gaussians_sky);
+					if (gaussians_sky.size() >= skyboxpoints) {
+						for (int i = 0; i < skyboxpoints; i++) {
+							gaussians_ply.emplace_back(gaussians_sky[i]);
+						}
 					}
 				}
-			}
-			else {
-				std::cout << "scaffold pc_info.txt not found: " << txtfile << std::endl;
+				else {
+					std::cout << "scaffold pc_info.txt not found: " << txtfile << std::endl;
+				}
 			}
 			
 			const float bigLimit = 30.f;
