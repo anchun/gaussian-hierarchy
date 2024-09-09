@@ -156,7 +156,7 @@ void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>
 	}
 
 	auto diff = node->bounds.maxx - node->bounds.minn;
-	node->bounds.minn.w() = std::max(std::max(diff.x(), diff.y()), diff.z());
+	node->bounds.minn.w() = std::min(std::min(diff.x(), diff.y()), diff.z());
 	node->bounds.maxx.w() = std::max(std::max(diff.x(), diff.y()), diff.z());
 }
 

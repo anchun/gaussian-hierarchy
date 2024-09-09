@@ -139,7 +139,7 @@ __device__ float computeSizeGPU(Box& box, Point viewpoint, Point zdir)
 
 	float min_dist = pointboxdistCUDA(box, viewpoint);
 
-	return box.minn.xyz[3] / min_dist;
+	return box.maxx.xyz[3] / min_dist;
 }
 
 __global__ void changeNodesOnce(
