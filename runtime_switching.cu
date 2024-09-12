@@ -117,17 +117,23 @@ __device__ bool inboxCUDA(Box& box, Point viewpoint)
 
 __device__ float pointboxdistCUDA(Box& box, Point viewpoint)
 {
-	Point closest = {
-		max(box.minn.xyz[0], min(box.maxx.xyz[0], viewpoint.xyz[0])),
-		max(box.minn.xyz[1], min(box.maxx.xyz[1], viewpoint.xyz[1])),
-		max(box.minn.xyz[2], min(box.maxx.xyz[2], viewpoint.xyz[2]))
-	};
+	// Point closest = {
+	// 	max(box.minn.xyz[0], min(box.maxx.xyz[0], viewpoint.xyz[0])),
+	// 	max(box.minn.xyz[1], min(box.maxx.xyz[1], viewpoint.xyz[1])),
+	// 	max(box.minn.xyz[2], min(box.maxx.xyz[2], viewpoint.xyz[2]))
+	// };
+	// Point diff = {
+	// 	viewpoint.xyz[0] - closest.xyz[0],
+	// 	viewpoint.xyz[1] - closest.xyz[1],
+	// 	viewpoint.xyz[2] - closest.xyz[2]
+	// };
 
+	// use center position instead of closest for easy visualization
 	Point diff = {
-		viewpoint.xyz[0] - closest.xyz[0],
-		viewpoint.xyz[1] - closest.xyz[1],
-		viewpoint.xyz[2] - closest.xyz[2]
-	};
+	 	viewpoint.xyz[0] - (box.minn.xyz[0] + box.maxx.xyz[0]) / 2,
+	 	viewpoint.xyz[1] - (box.minn.xyz[1] + box.maxx.xyz[1]) / 2,
+	 	viewpoint.xyz[2] - (box.minn.xyz[2] + box.maxx.xyz[2]) / 2
+	 };
 
 	return sqrt(diff.xyz[0] * diff.xyz[0] + diff.xyz[1] * diff.xyz[1] + diff.xyz[2] * diff.xyz[2]);
 }
