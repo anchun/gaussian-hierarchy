@@ -25,6 +25,7 @@
 #include <filesystem>
 #include "appearance_filter.h"
 #include "rotation_aligner.h"
+#include "hierarchy_writer.h"
 
 using json = nlohmann::json;
 
@@ -49,8 +50,8 @@ int main(int argc, char* argv[])
 	int chunk_count(argc - 5);
 	std::string rootpath(argv[1]);
 	std::string outputpath(argv[4]);
-	int sh_degree = std::stoi(argv[2]);
-	bool writeSky = false;
+	int with_hierarchy = std::stoi(argv[2]);
+	//bool writeSky = false;
 	{
 		// Read chunk centers
 		std::string inpath(argv[3]);
@@ -98,47 +99,61 @@ int main(int argc, char* argv[])
 			root->bounds.minn[3] = 1e9f;
 		}
 
+		// 
+		std::vector<Eigen::Vector3f> positions;
+		std::vector<Eigen::Vector4f> rotations;
+		std::vector<Eigen::Vector3f> log_scales;
+		std::vector<float> opacities;
+		std::vector<SHs> shs;
+		std::vector<Node> basenodes;
+		std::vector<Box> boxes;
+		Writer::makeHierarchy(gaussians, root, positions, rotations, log_scales, opacities, shs, basenodes, boxes);
+
 		std::string ext = outputpath.substr(outputpath.size() - 4);
 		if (ext != ".ply") {
-			Writer::writeHierarchy(
+			HierarchyWriter writer;
+			writer.write(
 				outputpath.c_str(),
-				gaussians, root, true);
+				positions.size(),
+				basenodes.size(),
+				positions.data(),
+				shs.data(),
+				opacities.data(),
+				log_scales.data(),
+				rotations.data(),
+				basenodes.data(),
+				boxes.data(),
+				true
+			);
 		}
 		else {
-			std::vector<Gaussian> gaussians_ply;
-
-			// for sky
-			if (writeSky) {
-				std::string scaffold_path = rootpath + "/../scaffold/point_cloud/iteration_30000";
-				std::string txtfile = scaffold_path + "/pc_info.txt";
-				std::string plyfile = scaffold_path + "/point_cloud.ply";
-				std::ifstream scaffoldfile(txtfile.c_str());
-				std::vector<Gaussian> gaussians_sky;
-				if (scaffoldfile.good()) {
-					std::string line;
-					std::getline(scaffoldfile, line);
-					int skyboxpoints = std::atoi(line.c_str());
-					Loader::loadPly(plyfile.c_str(), gaussians_sky);
-					if (gaussians_sky.size() >= skyboxpoints) {
-						for (int i = 0; i < skyboxpoints; i++) {
-							gaussians_ply.emplace_back(gaussians_sky[i]);
-						}
+			if (with_hierarchy) {
+				std::vector<Eigen::Vector4i> hiers;
+				std::vector<Eigen::Vector4f> bboxes;
+				hiers.resize(positions.size(), Eigen::Vector4i(0, -1, 0, 0));
+				bboxes.resize(positions.size(), Eigen::Vector4f(0, 0, 0, 0));
+				for (size_t i = 0; i < basenodes.size(); i++) {
+					const Node& node = basenodes[i];
+					const Box bbox = boxes[i];
+					Eigen::Vector4i& hier_out = hiers[node.start];
+					Eigen::Vector4f& bbox_out = bboxes[node.start];
+					hier_out[0] = node.depth;
+					hier_out[2] = node.count_leafs;
+					hier_out[3] = node.count_children;
+					bbox_out[0] = bbox.minn[3];
+					bbox_out[1] = bbox.maxx[3];
+					if (node.parent >= 0) {
+						hier_out[1] = basenodes[node.parent].start; // parent_index
+						const Box& parent_bbox = boxes[node.parent];
+						bbox_out[2] = parent_bbox.minn[3];
+						bbox_out[3] = parent_bbox.maxx[3];
 					}
 				}
-				else {
-					std::cout << "scaffold pc_info.txt not found: " << txtfile << std::endl;
-				}
+				Writer::writePlyHierarchy(outputpath.c_str(), positions, rotations, log_scales, opacities, shs, hiers, bboxes);
 			}
-			
-			const float bigLimit = 30.f;
-			for (const Gaussian& g : gaussians) {
-				// strip out big node in leaf for leaf gaussian with bigLimit
-				if (std::max(g.scale.z(), std::max(g.scale.x(), g.scale.y())) > bigLimit)
-					continue;
-				gaussians_ply.emplace_back(g);
+			else {
+				Writer::writePly(outputpath.c_str(), gaussians, 0);
 			}
-			
-			Writer::writePly(outputpath.c_str(), gaussians_ply, sh_degree);
 		}
 	}
 }

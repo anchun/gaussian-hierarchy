@@ -21,6 +21,16 @@ public:
 
 	static void writePly(const char* filename, const std::vector<Gaussian>& gaussian, std::uint32_t sh_degree);
 
+	static void writePlyHierarchy(
+		const char* filename,
+		std::vector<Eigen::Vector3f>& positions,
+		std::vector<Eigen::Vector4f>& rotations,
+		std::vector<Eigen::Vector3f>& log_scales,
+		std::vector<float>& opacities,
+		std::vector<SHs>& shs,
+		std::vector<Eigen::Vector4i>& hiers,
+		std::vector<Eigen::Vector4f>& bboxes);
+
 	static void makeHierarchy(
 		const std::vector<Gaussian>& gaussians,
 		const ExplicitTreeNode* root,

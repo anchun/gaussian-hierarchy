@@ -380,3 +380,65 @@ void Writer::writePly(const char* filename, const std::vector<Gaussian>& gaussia
 		std::cout << "not supported degrees:  " << sh_degree << std::endl;
 	}
 }
+
+void Writer::writePlyHierarchy(
+	const char* filename,
+	std::vector<Eigen::Vector3f>& positions,
+	std::vector<Eigen::Vector4f>& rotations,
+	std::vector<Eigen::Vector3f>& log_scales,
+	std::vector<float>& opacities,
+	std::vector<SHs>& shs,
+	std::vector<Eigen::Vector4i>& hiers,
+	std::vector<Eigen::Vector4f>& bboxes)
+{
+	size_t gaussianCount = positions.size();
+	// data prepare
+	std::vector<RichPointDegree0WithHierarchy> points(gaussianCount);
+	for (size_t i = 0; i < gaussianCount; i++)
+	{
+		RichPointDegree0WithHierarchy& p = points[i];
+		p.position = positions[i];
+		for (int j = 0; j < 3; j++)
+			p.shs[j] = shs[i][j];
+		double opacity = std::clamp((double)opacities[i], 1e-12, 1.0 - 1e-12);
+		p.opacity = (float)log(opacity / (1 - opacity));
+		p.scale = log_scales[i];
+		std::memcpy(p.rotation, rotations[i].data(), sizeof(float) * 4);
+		std::memcpy(p.hier, hiers[i].data(), sizeof(int) * 4);
+		std::memcpy(p.bbox, bboxes[i].data(), sizeof(float) * 4);
+	}
+
+	std::ofstream outfile(filename, std::ios_base::binary);
+	if (!outfile.good())
+		throw std::runtime_error("File not created!");
+
+	outfile << "ply" << std::endl;
+	outfile << "format binary_little_endian 1.0" << std::endl;
+	outfile << "element vertex " << points.size() << std::endl;
+	outfile << "property float x" << std::endl;
+	outfile << "property float y" << std::endl;
+	outfile << "property float z" << std::endl;
+	outfile << "property float f_dc_0" << std::endl;
+	outfile << "property float f_dc_1" << std::endl;
+	outfile << "property float f_dc_2" << std::endl;
+	outfile << "property float opacity" << std::endl;
+	outfile << "property float scale_0" << std::endl;
+	outfile << "property float scale_1" << std::endl;
+	outfile << "property float scale_2" << std::endl;
+	outfile << "property float rot_0" << std::endl;
+	outfile << "property float rot_1" << std::endl;
+	outfile << "property float rot_2" << std::endl;
+	outfile << "property float rot_3" << std::endl;
+	outfile << "property int hier_0" << std::endl;
+	outfile << "property int hier_1" << std::endl;
+	outfile << "property int hier_2" << std::endl;
+	outfile << "property int hier_3" << std::endl;
+	outfile << "property float bbox_0" << std::endl;
+	outfile << "property float bbox_1" << std::endl;
+	outfile << "property float bbox_2" << std::endl;
+	outfile << "property float bbox_3" << std::endl;
+	outfile << "end_header" << std::endl;
+	outfile.write((char*)points.data(), points.size() * sizeof(RichPointDegree0WithHierarchy));
+	outfile.close();
+	std::cout << "writing succeed: " << filename << std::endl;
+}

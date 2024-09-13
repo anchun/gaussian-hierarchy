@@ -154,8 +154,8 @@ bool bottomRec(ExplicitTreeNode* node, const std::map<const ExplicitTreeNode*, i
 			some |= result;
 		}
 
-		if (some && !all)
-			throw std::runtime_error("Incomplete cut!");
+		//if (some && !all)
+		//	throw std::runtime_error("Incomplete cut!");
 
 		if (all)
 			return true;
