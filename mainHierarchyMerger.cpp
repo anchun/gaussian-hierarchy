@@ -98,7 +98,11 @@ int main(int argc, char* argv[])
 			root->bounds.maxx[3] = 1e9f;
 			root->bounds.minn[3] = 1e9f;
 		}
-
+		if (chunk_count > 1) {
+			Gaussian gaussian = AvgMerger::mergeGaussians(root->merged);
+			root->merged.clear();
+			root->merged.emplace_back(gaussian);
+		}
 		// 
 		std::vector<Eigen::Vector3f> positions;
 		std::vector<Eigen::Vector4f> rotations;

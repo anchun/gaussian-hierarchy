@@ -19,4 +19,5 @@ private:
 	void mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>& leaf_gaussians);
 public:
 	void merge(ExplicitTreeNode* root, const std::vector<Gaussian>& gaussians);
+	static Gaussian mergeGaussians(const std::vector<Gaussian>& gaussians);
 };
