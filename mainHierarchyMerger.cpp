@@ -103,35 +103,25 @@ int main(int argc, char* argv[])
 			root->merged.clear();
 			root->merged.emplace_back(gaussian);
 		}
-		// 
-		std::vector<Eigen::Vector3f> positions;
-		std::vector<Eigen::Vector4f> rotations;
-		std::vector<Eigen::Vector3f> log_scales;
-		std::vector<float> opacities;
-		std::vector<SHs> shs;
-		std::vector<Node> basenodes;
-		std::vector<Box> boxes;
-		Writer::makeHierarchy(gaussians, root, positions, rotations, log_scales, opacities, shs, basenodes, boxes);
 
 		std::string ext = outputpath.substr(outputpath.size() - 4);
 		if (ext != ".ply") {
-			HierarchyWriter writer;
-			writer.write(
+			Writer::writeHierarchy(
 				outputpath.c_str(),
-				positions.size(),
-				basenodes.size(),
-				positions.data(),
-				shs.data(),
-				opacities.data(),
-				log_scales.data(),
-				rotations.data(),
-				basenodes.data(),
-				boxes.data(),
-				true
-			);
+				gaussians, root, true);
 		}
 		else {
 			if (with_hierarchy) {
+				std::vector<Eigen::Vector3f> positions;
+				std::vector<Eigen::Vector4f> rotations;
+				std::vector<Eigen::Vector3f> log_scales;
+				std::vector<float> opacities;
+				std::vector<SHs> shs;
+				std::vector<Node> basenodes;
+				std::vector<Box> boxes;
+				Writer::makeHierarchy(gaussians, root, positions, rotations, log_scales, opacities, shs, basenodes, boxes);
+				gaussians.clear();
+
 				std::vector<Eigen::Vector4i> hiers;
 				std::vector<Eigen::Vector4f> bboxes;
 				hiers.resize(positions.size(), Eigen::Vector4i(0, -1, 0, 0));
