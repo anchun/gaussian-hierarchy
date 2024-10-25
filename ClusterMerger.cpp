@@ -41,8 +41,12 @@ void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>
 			toMerge.push_back(&leaf_gaussians[child_leaf]);
 	}
 
-	if (node->depth == 0)
+	if (node->depth == 0) {
+		Eigen::Vector4f diff = node->bounds.maxx - node->bounds.minn;
+		node->bounds.minn.w() = std::min(std::min(diff.x(), diff.y()), diff.z());
+		node->bounds.maxx.w() = std::max(std::max(diff.x(), diff.y()), diff.z());
 		return;
+	}
 
 	float weight_sum = 0;
 	std::vector<float> weights;
@@ -134,28 +138,28 @@ void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>
 
 	node->merged.push_back(clustered);
 
-	Gaussian g;
-	if (node->depth == 0)
-	{
-		g = leaf_gaussians[node->leaf_indices[0]];
-	}
-	else
-	{
-		g = node->merged[0];
-	}
-	float minextent = g.scale.array().minCoeff();
-	float maxextent = g.scale.array().maxCoeff();
+	//Gaussian g;
+	//if (node->depth == 0)
+	//{
+	//	g = leaf_gaussians[node->leaf_indices[0]];
+	//}
+	//else
+	//{
+	//	g = node->merged[0];
+	//}
+	//float minextent = g.scale.array().minCoeff();
+	//float maxextent = g.scale.array().maxCoeff();
 
-	if (node->depth != 0)
-	{
-		for (int i = 0; i < 2; i++)
-		{
-			minextent = std::max(minextent, node->children[i]->bounds.minn.w());
-			maxextent = std::max(maxextent, node->children[i]->bounds.maxx.w());
-		}
-	}
+	//if (node->depth != 0)
+	//{
+	//	for (int i = 0; i < 2; i++)
+	//	{
+	//		minextent = std::max(minextent, node->children[i]->bounds.minn.w());
+	//		maxextent = std::max(maxextent, node->children[i]->bounds.maxx.w());
+	//	}
+	//}
 
-	auto diff = node->bounds.maxx - node->bounds.minn;
+	Eigen::Vector4f diff = node->bounds.maxx - node->bounds.minn;
 	node->bounds.minn.w() = std::min(std::min(diff.x(), diff.y()), diff.z());
 	node->bounds.maxx.w() = std::max(std::max(diff.x(), diff.y()), diff.z());
 }
