@@ -115,36 +115,17 @@ __device__ bool inboxCUDA(Box& box, Point viewpoint)
 	return inside;
 }
 
-__device__ float pointboxdistCUDA(Box& box, Point viewpoint)
-{
-	// Point closest = {
-	// 	max(box.minn.xyz[0], min(box.maxx.xyz[0], viewpoint.xyz[0])),
-	// 	max(box.minn.xyz[1], min(box.maxx.xyz[1], viewpoint.xyz[1])),
-	// 	max(box.minn.xyz[2], min(box.maxx.xyz[2], viewpoint.xyz[2]))
-	// };
-	// Point diff = {
-	// 	viewpoint.xyz[0] - closest.xyz[0],
-	// 	viewpoint.xyz[1] - closest.xyz[1],
-	// 	viewpoint.xyz[2] - closest.xyz[2]
-	// };
-
-	// use center position instead of closest for easy visualization
-	Point diff = {
-	 	viewpoint.xyz[0] - (box.minn.xyz[0] + box.maxx.xyz[0]) / 2,
-	 	viewpoint.xyz[1] - (box.minn.xyz[1] + box.maxx.xyz[1]) / 2,
-	 	viewpoint.xyz[2] - (box.minn.xyz[2] + box.maxx.xyz[2]) / 2
-	 };
-
-	return sqrt(diff.xyz[0] * diff.xyz[0] + diff.xyz[1] * diff.xyz[1] + diff.xyz[2] * diff.xyz[2]);
-}
-
-__device__ float computeSizeGPU(Box& box, Point viewpoint, Point zdir)
+__device__ float computeSizeGPU(Box& box, Point point, Point viewpoint)
 {
 	if (inboxCUDA(box, viewpoint))
 		return FLT_MAX;
 
-	float min_dist = pointboxdistCUDA(box, viewpoint);
-
+	Point diff = {
+	 	viewpoint.xyz[0] - point.xyz[0],
+	 	viewpoint.xyz[1] - point.xyz[1],
+	 	viewpoint.xyz[2] - point.xyz[2]
+	 };
+	float min_dist = sqrt(diff.xyz[0] * diff.xyz[0] + diff.xyz[1] * diff.xyz[1] + diff.xyz[2] * diff.xyz[2]);
 	return box.maxx.xyz[3] / min_dist;
 }
 
@@ -168,7 +149,9 @@ __global__ void changeNodesOnce(
 
 	int node_id = indices[idx];
 	Node node = nodes[node_id];
-	float size = computeSizeGPU(boxes[node_id], *viewpoint, zdir);
+	Box box = boxes[node_id];
+	Point point = {(box.minn.xyz[0] + box.maxx.xyz[0]) / 2, (box.minn.xyz[1] + box.maxx.xyz[1]) / 2, (box.minn.xyz[2] + box.maxx.xyz[2]) / 2};
+	float size = computeSizeGPU(box, point, *viewpoint);
 
 	int count = 1; // repeat yourself
 	char need_child = 0;
@@ -194,7 +177,7 @@ __global__ void changeNodesOnce(
 		if (parent_node_id != -1)
 		{
 			Node parent_node = nodes[parent_node_id];
-			float parent_size = computeSizeGPU(boxes[parent_node_id], *viewpoint, zdir);
+			float parent_size = computeSizeGPU(boxes[parent_node_id], point, *viewpoint);
 			if (parent_size < target_size) // collapse
 			{
 				split[parent_node_id] = 0;
@@ -413,14 +396,16 @@ __global__ void markNodesForSize(Node* nodes, Box* boxes, int N, Point* viewpoin
 
 	int node_id = idx;
 	Node node = nodes[node_id];
-	float size = computeSizeGPU(boxes[node_id], *viewpoint, zdir);
+	Box box = boxes[node_id];
+	Point point = {(box.minn.xyz[0] + box.maxx.xyz[0]) / 2, (box.minn.xyz[1] + box.maxx.xyz[1]) / 2, (box.minn.xyz[2] + box.maxx.xyz[2]) / 2};
+	float size = computeSizeGPU(box, point, *viewpoint);
 
 	int count = 0;
 	if (size >= target_size)
 		count = node.count_leafs;
 	else if (node.parent != -1)
 	{
-		float parent_size = computeSizeGPU(boxes[node.parent], *viewpoint, zdir);
+		float parent_size = computeSizeGPU(boxes[node.parent], point, *viewpoint);
 		if (parent_size >= target_size)
 		{
 			count = node.count_leafs;
@@ -460,13 +445,16 @@ __global__ void computeTsIndexed(
 		t = 1.0f;
 	else
 	{
-		float parentsize = computeSizeGPU(boxes[node.parent], viewpoint, zdir);
+		Box box = boxes[node_id];
+		Point point = {(box.minn.xyz[0] + box.maxx.xyz[0]) / 2, (box.minn.xyz[1] + box.maxx.xyz[1]) / 2, (box.minn.xyz[2] + box.maxx.xyz[2]) / 2};
+
+		float parentsize = computeSizeGPU(boxes[node.parent], point, viewpoint);
 
 		if (parentsize > 2.0f * target_size)
 			t = 1.0f;
 		else
 		{
-			float size = computeSizeGPU(boxes[node_id], viewpoint, zdir);
+			float size = computeSizeGPU(boxes[node_id], point, viewpoint);
 			float start = max(0.5f * parentsize, size);
 			float diff = parentsize - start;
 
