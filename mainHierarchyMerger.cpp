@@ -74,11 +74,15 @@ int main(int argc, char* argv[])
 		{
 			int argidx(chunk_id + 5);
 			std::cout << "Adding hierarchy for chunk " << argv[argidx] << std::endl;
+			std::string hierpath = rootpath + "/" + argv[argidx] + "/hierarchy.hier_opt";
+			std::ifstream hierFile(hierpath, std::ios_base::binary);
+			if(!hierFile.good() || hierFile.peek() == std::ifstream::traits_type::eof())
+				hierpath = rootpath + "/" + argv[argidx] + "/hierarchy.hier"; // without opt
+			std::cout << "Hierarchy file path: " << hierpath << std::endl;
+			hierFile.close();
 			
 			ExplicitTreeNode* chunkRoot = new ExplicitTreeNode;
-			HierarchyExplicitLoader::loadExplicit(
-				(rootpath + "/" + argv[argidx] + "/hierarchy.hier_opt").c_str(),
-				gaussians, chunkRoot, chunk_id, chunk_centers);
+			HierarchyExplicitLoader::loadExplicit(hierpath.c_str(), gaussians, chunkRoot, chunk_id, chunk_centers);
 
 			if (chunk_id == 0)
 			{
@@ -122,31 +126,25 @@ int main(int argc, char* argv[])
 				Writer::makeHierarchy(gaussians, root, positions, rotations, log_scales, opacities, shs, basenodes, boxes);
 				gaussians.clear();
 
+				// parent_id, count_leafs, node_size, parent_node_size
 				std::vector<Eigen::Vector4i> hiers;
-				std::vector<Eigen::Vector4f> bboxes;
-				hiers.resize(positions.size(), Eigen::Vector4i(0, -1, 0, 0));
-				bboxes.resize(positions.size(), Eigen::Vector4f(0, 0, 0, 0));
+				hiers.resize(positions.size(), Eigen::Vector4i(0, 0, 0, 0));
 				for (size_t i = 0; i < basenodes.size(); i++) {
 					const Node& node = basenodes[i];
 					const Box bbox = boxes[i];
 					Eigen::Vector4i& hier_out = hiers[node.start];
-					Eigen::Vector4f& bbox_out = bboxes[node.start];
-					hier_out[0] = node.depth;
-					hier_out[2] = node.count_leafs;
-					hier_out[3] = node.count_children;
-					bbox_out[0] = bbox.minn[3];
-					bbox_out[1] = bbox.maxx[3];
+					hier_out[1] = node.count_leafs;
+					hier_out[2] = int(bbox.maxx[3] * 1000); // scale 1000
 					if (node.parent >= 0) {
-						hier_out[1] = basenodes[node.parent].start; // parent_index
+						hier_out[0] = basenodes[node.parent].start; // parent_index
 						const Box& parent_bbox = boxes[node.parent];
-						bbox_out[2] = parent_bbox.minn[3];
-						bbox_out[3] = parent_bbox.maxx[3];
+						hier_out[3] = int(parent_bbox.maxx[3] * 1000); // scale 1000
 					}
 				}
-				Writer::writePlyHierarchy(outputpath.c_str(), positions, rotations, log_scales, opacities, shs, hiers, bboxes);
+				Writer::writePlyHierarchy(outputpath.c_str(), positions, rotations, log_scales, opacities, shs, hiers);
 			}
 			else {
-				Writer::writePly(outputpath.c_str(), gaussians, 0);
+				Writer::writePly(outputpath.c_str(), gaussians, 1);
 			}
 		}
 	}

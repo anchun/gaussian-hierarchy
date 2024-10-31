@@ -259,7 +259,6 @@ void writePlyDegree1(const char* filename, const std::vector<Gaussian>& gaussian
 		const Gaussian& g = gaussians[i];
 		RichPointDegree1& p = points[i];
 		p.position = g.position;
-		p.normal = Eigen::Vector3f(0, 0, 0);
 		for (int j = 0; j < 3; j++)
 			p.shs[j] = g.shs[j];
 		for (int j = 1; j < 4; j++)
@@ -287,9 +286,6 @@ void writePlyDegree1(const char* filename, const std::vector<Gaussian>& gaussian
 	outfile << "property float x" << std::endl;
 	outfile << "property float y" << std::endl;
 	outfile << "property float z" << std::endl;
-	outfile << "property float nx" << std::endl;
-	outfile << "property float ny" << std::endl;
-	outfile << "property float nz" << std::endl;
 	outfile << "property float f_dc_0" << std::endl;
 	outfile << "property float f_dc_1" << std::endl;
 	outfile << "property float f_dc_2" << std::endl;
@@ -388,24 +384,29 @@ void Writer::writePlyHierarchy(
 	std::vector<Eigen::Vector3f>& log_scales,
 	std::vector<float>& opacities,
 	std::vector<SHs>& shs,
-	std::vector<Eigen::Vector4i>& hiers,
-	std::vector<Eigen::Vector4f>& bboxes)
+	std::vector<Eigen::Vector4i>& hiers)
 {
 	size_t gaussianCount = positions.size();
 	// data prepare
-	std::vector<RichPointDegree0WithHierarchy> points(gaussianCount);
+	std::vector<RichPointDegree1WithHierarchy> points(gaussianCount);
 	for (size_t i = 0; i < gaussianCount; i++)
 	{
-		RichPointDegree0WithHierarchy& p = points[i];
+		RichPointDegree1WithHierarchy& p = points[i];
 		p.position = positions[i];
+		const SHs& sh = shs[i];
 		for (int j = 0; j < 3; j++)
-			p.shs[j] = shs[i][j];
+			p.shs[j] = sh[j];
+		for (int j = 1; j < 4; j++)
+		{
+			p.shs[(j - 1) + 3] = sh[j * 3 + 0];
+			p.shs[(j - 1) + 6] = sh[j * 3 + 1];
+			p.shs[(j - 1) + 9] = sh[j * 3 + 2];
+		}
 		double opacity = std::clamp((double)opacities[i], 1e-12, 1.0 - 1e-12);
 		p.opacity = (float)log(opacity / (1 - opacity));
 		p.scale = log_scales[i];
 		std::memcpy(p.rotation, rotations[i].data(), sizeof(float) * 4);
 		std::memcpy(p.hier, hiers[i].data(), sizeof(int) * 4);
-		std::memcpy(p.bbox, bboxes[i].data(), sizeof(float) * 4);
 	}
 
 	std::ofstream outfile(filename, std::ios_base::binary);
@@ -421,6 +422,15 @@ void Writer::writePlyHierarchy(
 	outfile << "property float f_dc_0" << std::endl;
 	outfile << "property float f_dc_1" << std::endl;
 	outfile << "property float f_dc_2" << std::endl;
+	outfile << "property float f_rest_0" << std::endl;
+	outfile << "property float f_rest_1" << std::endl;
+	outfile << "property float f_rest_2" << std::endl;
+	outfile << "property float f_rest_3" << std::endl;
+	outfile << "property float f_rest_4" << std::endl;
+	outfile << "property float f_rest_5" << std::endl;
+	outfile << "property float f_rest_6" << std::endl;
+	outfile << "property float f_rest_7" << std::endl;
+	outfile << "property float f_rest_8" << std::endl;
 	outfile << "property float opacity" << std::endl;
 	outfile << "property float scale_0" << std::endl;
 	outfile << "property float scale_1" << std::endl;
@@ -433,12 +443,8 @@ void Writer::writePlyHierarchy(
 	outfile << "property int hier_1" << std::endl;
 	outfile << "property int hier_2" << std::endl;
 	outfile << "property int hier_3" << std::endl;
-	outfile << "property float bbox_0" << std::endl;
-	outfile << "property float bbox_1" << std::endl;
-	outfile << "property float bbox_2" << std::endl;
-	outfile << "property float bbox_3" << std::endl;
 	outfile << "end_header" << std::endl;
-	outfile.write((char*)points.data(), points.size() * sizeof(RichPointDegree0WithHierarchy));
+	outfile.write((char*)points.data(), points.size() * sizeof(RichPointDegree1WithHierarchy));
 	outfile.close();
 	std::cout << "writing succeed: " << filename << std::endl;
 }
