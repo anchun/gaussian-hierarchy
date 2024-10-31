@@ -81,14 +81,18 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 		throw std::runtime_error("File not found!");
 
 	std::string buff;
-	std::getline(infile, buff);
-	std::getline(infile, buff);
-
-	std::string dummy;
-	std::getline(infile, buff);
-	std::stringstream ss(buff);
-	int count;
-	ss >> dummy >> dummy >> count;
+	int count = 0;
+	while (true)
+	{
+		std::getline(infile, buff);
+		std::stringstream ss(buff);
+		std::string dummy;
+		ss >> dummy;
+		if (dummy == "element") {
+			ss  >> dummy >> count;
+			break;
+		}
+	}
 
 	int property_count = 0;
 	while (std::getline(infile, buff))

@@ -64,6 +64,10 @@ add_executable (GaussianHierarchyMerger
  mainHierarchyMerger.cpp
 )
 
+add_executable (GaussianHierarchyPlyGenerator
+ mainHierarchyPlyGenerator.cpp
+)
+
 target_include_directories(GaussianHierarchyCreator PRIVATE dependencies/eigen)
 set_property(TARGET GaussianHierarchyCreator PROPERTY CXX_STANDARD 17)
 target_link_libraries(GaussianHierarchyCreator PUBLIC GaussianHierarchy)
@@ -71,3 +75,7 @@ target_link_libraries(GaussianHierarchyCreator PUBLIC GaussianHierarchy)
 target_include_directories(GaussianHierarchyMerger PRIVATE dependencies/eigen)
 set_property(TARGET GaussianHierarchyMerger PROPERTY CXX_STANDARD 17)
 target_link_libraries(GaussianHierarchyMerger PUBLIC GaussianHierarchy)
+
+target_include_directories(GaussianHierarchyPlyGenerator PRIVATE dependencies/eigen)
+set_property(TARGET GaussianHierarchyPlyGenerator PROPERTY CXX_STANDARD 17)
+target_link_libraries(GaussianHierarchyPlyGenerator PUBLIC GaussianHierarchy)
