@@ -129,6 +129,31 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
 	}
+	else if (property_count == sizeof(RichPointDegree1WithNormal) / sizeof(float)) {
+		std::vector<RichPointDegree1WithNormal> points(count);
+		infile.read((char*)points.data(), count * sizeof(RichPointDegree1WithNormal));
+
+		for (int i = 0; i < gaussians.size(); i++)
+		{
+			Gaussian& g = gaussians[i];
+			RichPointDegree1WithNormal& p = points[skyboxpoints + i];
+
+			g.opacity = sigmoid(p.opacity);
+			g.position = p.position;
+			g.rotation = Eigen::Vector4f(p.rotation[0], p.rotation[1], p.rotation[2], p.rotation[3]).normalized();
+			g.scale = p.scale.array().exp();
+			g.shs.setZero();
+			for (int j = 0; j < 3; j++)
+				g.shs[j] = p.shs[j];
+			for (int j = 1; j < 4; j++)
+			{
+				g.shs[j * 3 + 0] = p.shs[(j - 1) + 3];
+				g.shs[j * 3 + 1] = p.shs[(j - 1) + 6];
+				g.shs[j * 3 + 2] = p.shs[(j - 1) + 9];
+			}
+			computeCovariance(g.scale, g.rotation, g.covariance);
+		}
+	}
 	else if (property_count == sizeof(RichPointDegree1) / sizeof(float)) {
 		std::vector<RichPointDegree1> points(count);
 		infile.read((char*)points.data(), count * sizeof(RichPointDegree1));
