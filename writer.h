@@ -28,7 +28,8 @@ public:
 		std::vector<Eigen::Vector3f>& log_scales,
 		std::vector<float>& opacities,
 		std::vector<SHs>& shs,
-		std::vector<Eigen::Vector4i>& hiers);
+		std::vector<Eigen::Vector4i>& hiers,
+		std::uint32_t sh_degree = 0);
 
 	static void makeHierarchy(
 		const std::vector<Gaussian>& gaussians,
