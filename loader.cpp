@@ -99,7 +99,8 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 	{
 		if (buff.compare("end_header") == 0)
 			break;
-		property_count++;
+		if(buff.find_first_of("property") == 0)
+			property_count++;
 	}
 
 	gaussians.resize(count - skyboxpoints);

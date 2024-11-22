@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
 				Writer::writePlyHierarchy(outputpath.c_str(), positions, rotations, log_scales, opacities, shs, hiers);
 			}
 			else {
-				Writer::writePly(outputpath.c_str(), gaussians, 1);
+				Writer::writePly(outputpath.c_str(), gaussians, 0);
 			}
 		}
 	}
