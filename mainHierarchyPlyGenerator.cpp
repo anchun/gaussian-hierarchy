@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
 		const Node& node = basenodes[i];
 		const Box bbox = boxes[i];
 		Eigen::Vector4i& hier_out = hiers[node.start];
-		hier_out[1] = node.count_leafs;
+		hier_out[1] = node.depth * 65536 + node.count_children; // depth=0 for leaf
 		hier_out[2] = int(bbox.maxx[3] * 1000); // scale 1000
 		if (node.parent >= 0) {
 			hier_out[0] = basenodes[node.parent].start; // parent_index
