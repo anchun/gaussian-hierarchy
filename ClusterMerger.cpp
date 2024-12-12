@@ -56,6 +56,13 @@ void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>
 		weights.push_back(w);
 		weight_sum += w;
 	}
+	if (weight_sum < 1e-10f || std::isnan(weight_sum)) {
+		std::cout << "find Invalid weight: " << weight_sum << std::endl;
+		Eigen::Vector4f diff = node->bounds.maxx - node->bounds.minn;
+		node->bounds.minn.w() = std::min(std::min(diff.x(), diff.y()), diff.z());
+		node->bounds.maxx.w() = std::max(std::max(diff.x(), diff.y()), diff.z());
+		return;
+	}
 	for (int i = 0; i < weights.size(); i++)
 		weights[i] = weights[i] / weight_sum;
 
