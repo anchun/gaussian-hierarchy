@@ -71,58 +71,67 @@ int main(int argc, char* argv[])
 	}
 
 	int valid = 0;
-	bool not_warned = true;
+	bool not_warned[8] = { true };
 	std::vector<Gaussian> gaussians(gaussians_unfiltered.size());
 	for (int i = 0; i < gaussians_unfiltered.size(); i++)
 	{
 		Gaussian& g = gaussians_unfiltered[i];
 		if (std::isinf(g.opacity))
 		{
-			if (not_warned)
+			if (not_warned[0])
 				std::cout << "Found Inf opacity";
-			not_warned = false;
+			not_warned[0] = false;
 			continue;
 		}
 		if (std::isnan(g.opacity))
 		{
-			if (not_warned)
+			if (not_warned[1])
 				std::cout << "Found NaN opacity";
-			not_warned = false;
+			not_warned[1] = false;
 			continue;
 		}
 		if (g.scale.hasNaN())
 		{
-			if (not_warned)
+			if (not_warned[2])
 				std::cout << "Found NaN scale";
-			not_warned = false;
+			not_warned[2] = false;
+			continue;
+		}
+		if ((g.scale.x() < 1e-7f && g.scale.y() < 1e-7f) ||
+			(g.scale.y() < 1e-7f && g.scale.z() < 1e-7f) ||
+			(g.scale.x() < 1e-7f && g.scale.z() < 1e-7f))
+		{
+			if (not_warned[3])
+				std::cout << "Found invalid scale";
+			not_warned[3] = false;
 			continue;
 		}
 		if (g.rotation.hasNaN())
 		{
-			if (not_warned)
+			if (not_warned[4])
 				std::cout << "Found NaN rot";
-			not_warned = false;
+			not_warned[4] = false;
 			continue;
 		}
 		if (g.position.hasNaN())
 		{
-			if (not_warned)
+			if (not_warned[5])
 				std::cout << "Found NaN pos";
-			not_warned = false;
+			not_warned[5] = false;
 			continue;
 		}
 		if (g.shs.hasNaN())
 		{
-			if(not_warned)
+			if(not_warned[6])
 				std::cout << "Found NaN sh";
-			not_warned = false;
+			not_warned[6] = false;
 			continue;
 		}
-		if (g.opacity == 0)
+		if (g.opacity < 1e-7f)
 		{
-			if (not_warned)
+			if (not_warned[7])
 				std::cout << "Found 0 opacity";
-			not_warned = false;
+			not_warned[7] = false;
 			continue;
 		}
 
