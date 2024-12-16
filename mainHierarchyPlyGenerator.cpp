@@ -45,7 +45,7 @@ void recTraverse(ExplicitTreeNode* node, int& zerocount)
 int main(int argc, char* argv[])
 {
 	if (argc < 3)
-		throw std::runtime_error("Failed to pass args <plyfile> <outputpath>");
+		throw std::runtime_error("Failed to pass args <plyfile> <outputpath> <sh_degree=0>");
 
 	std::vector<Gaussian> gaussians;
 	try
@@ -62,6 +62,10 @@ int main(int argc, char* argv[])
 		filename = filename + "bin";
 		std::cout << filename << std::endl;
 		Loader::loadBin(filename.c_str(), gaussians, 0);
+	}
+	uint32_t sh_degree = 0;
+	if (argc > 3) {
+		sh_degree = std::stoi(argv[3]);
 	}
 
 	std::cout << "Generating" << std::endl;
@@ -103,5 +107,5 @@ int main(int argc, char* argv[])
 			hier_out[3] = int(parent_bbox.maxx[3] * 1000); // scale 1000
 		}
 	}
-	Writer::writePlyHierarchy(outputpath.c_str(), positions, rotations, log_scales, opacities, shs, hiers);
+	Writer::writePlyHierarchy(outputpath.c_str(), positions, rotations, log_scales, opacities, shs, hiers, sh_degree);
 }

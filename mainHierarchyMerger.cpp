@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
 	int chunk_count(argc - 5);
 	std::string rootpath(argv[1]);
 	std::string outputpath(argv[4]);
-	int with_hierarchy = std::stoi(argv[2]);
+	int sh_degree = std::stoi(argv[2]);
 	//bool writeSky = false;
 	{
 		// Read chunk centers
@@ -115,37 +115,7 @@ int main(int argc, char* argv[])
 				gaussians, root, true);
 		}
 		else {
-			if (with_hierarchy) {
-				std::vector<Eigen::Vector3f> positions;
-				std::vector<Eigen::Vector4f> rotations;
-				std::vector<Eigen::Vector3f> log_scales;
-				std::vector<float> opacities;
-				std::vector<SHs> shs;
-				std::vector<Node> basenodes;
-				std::vector<Box> boxes;
-				Writer::makeHierarchy(gaussians, root, positions, rotations, log_scales, opacities, shs, basenodes, boxes);
-				gaussians.clear();
-
-				// parent_id, count_leafs, node_size, parent_node_size
-				std::vector<Eigen::Vector4i> hiers;
-				hiers.resize(positions.size(), Eigen::Vector4i(0, 0, 0, 0));
-				for (size_t i = 0; i < basenodes.size(); i++) {
-					const Node& node = basenodes[i];
-					const Box bbox = boxes[i];
-					Eigen::Vector4i& hier_out = hiers[node.start];
-					hier_out[1] = node.depth * 65536 + node.count_children; // depth=0 for leaf
-					hier_out[2] = int(bbox.maxx[3] * 1000); // scale 1000
-					if (node.parent >= 0) {
-						hier_out[0] = basenodes[node.parent].start; // parent_index
-						const Box& parent_bbox = boxes[node.parent];
-						hier_out[3] = int(parent_bbox.maxx[3] * 1000); // scale 1000
-					}
-				}
-				Writer::writePlyHierarchy(outputpath.c_str(), positions, rotations, log_scales, opacities, shs, hiers);
-			}
-			else {
-				Writer::writePly(outputpath.c_str(), gaussians, 1);
-			}
+			Writer::writePly(outputpath.c_str(), gaussians, sh_degree);
 		}
 	}
 }
