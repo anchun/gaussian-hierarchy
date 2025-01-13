@@ -15,7 +15,7 @@
 #include <fstream>
 #include <string>
 
-void Loader::loadPlyDir(const char* filename, std::vector<Gaussian>& gaussians)
+uint32_t Loader::loadPlyDir(const char* filename, std::vector<Gaussian>& gaussians)
 {
 	int num_skip;
 	std::ifstream cfgfile(std::string(filename) + "/pc_info.txt");
@@ -71,9 +71,10 @@ void Loader::loadPlyDir(const char* filename, std::vector<Gaussian>& gaussians)
 		}
 		computeCovariance(g.scale, g.rotation, g.covariance);
 	}
+	return 1; // sh_degree
 }
 
-void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int skyboxpoints)
+uint32_t Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int skyboxpoints)
 {
 	std::ifstream infile(filename, std::ios_base::binary);
 	std::cout << filename << std::endl;
@@ -129,6 +130,7 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 			}
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
+		return 3; //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree1WithNormal) / sizeof(float)) {
 		std::vector<RichPointDegree1WithNormal> points(count);
@@ -154,6 +156,7 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 			}
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
+		return 1; //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree1) / sizeof(float)) {
 		std::vector<RichPointDegree1> points(count);
@@ -179,6 +182,7 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 			}
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
+		return 1; //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree0WithNormal) / sizeof(float)) {
 		std::vector<RichPointDegree0WithNormal> points(count);
@@ -198,6 +202,7 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 				g.shs[j] = p.shs[j];
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
+		return 0; //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree0) / sizeof(float)) {
 		std::vector<RichPointDegree0> points(count);
@@ -217,14 +222,16 @@ void Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians, int
 				g.shs[j] = p.shs[j];
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
+		return 0; //sh_degree
 	}
 	else {
 		std::cout << "Invalid ply files with property_count" << property_count << std::endl;
 		throw std::runtime_error("Invalid ply files!");
 	}
+	return 0; //sh_degree
 }
 
-void Loader::loadBin(const char* filename, std::vector<Gaussian>& gaussians, int skyboxpoints)
+uint32_t Loader::loadBin(const char* filename, std::vector<Gaussian>& gaussians, int skyboxpoints)
 {
 	std::ifstream infile(filename, std::ios_base::binary);
 
@@ -261,4 +268,5 @@ void Loader::loadBin(const char* filename, std::vector<Gaussian>& gaussians, int
 		g.shs = shs[k];
 		computeCovariance(g.scale, g.rotation, g.covariance);
 	}
+	return 3; //sh_degree
 }

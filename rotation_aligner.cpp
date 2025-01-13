@@ -87,7 +87,7 @@ void matchExhaustive(const Gaussian& ref, Gaussian& match)
 	computeCovariance(match.scale, match.rotation, cov);
 }
 
-void topDownAlign(ExplicitTreeNode* node, std::vector<Gaussian>& gaussians)
+void topDownAlign(ExplicitTreeNode* node, const std::vector<Gaussian>& gaussians)
 {
 	if (node->merged.size() != 0)
 	{
@@ -101,7 +101,7 @@ void topDownAlign(ExplicitTreeNode* node, std::vector<Gaussian>& gaussians)
 			}
 			for (auto& i : child->leaf_indices)
 			{
-				matchExhaustive(ref, gaussians[i]);
+				//matchExhaustive(ref, gaussians[i]);
 			}
 
 			topDownAlign(child, gaussians);
@@ -109,7 +109,7 @@ void topDownAlign(ExplicitTreeNode* node, std::vector<Gaussian>& gaussians)
 	}
 }
 
-void RotationAligner::align(ExplicitTreeNode* root, std::vector<Gaussian>& gaussians)
+void RotationAligner::align(ExplicitTreeNode* root, const std::vector<Gaussian>& gaussians)
 {
 	topDownAlign(root, gaussians);
 }

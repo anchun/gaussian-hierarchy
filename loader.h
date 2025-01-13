@@ -17,9 +17,9 @@
 class Loader
 {
 public:
-	static void loadPlyDir(const char* filename, std::vector<Gaussian>& gaussian);
+	static uint32_t loadPlyDir(const char* filename, std::vector<Gaussian>& gaussian);
 
-	static void loadPly(const char* filename, std::vector<Gaussian>& gaussian, int skyboxpoints = 0);
+	static uint32_t loadPly(const char* filename, std::vector<Gaussian>& gaussian, int skyboxpoints = 0);
 
-	static void loadBin(const char* filename, std::vector<Gaussian>& gaussian, int skyboxpoints = 0);
+	static uint32_t loadBin(const char* filename, std::vector<Gaussian>& gaussian, int skyboxpoints = 0);
 };

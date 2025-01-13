@@ -72,6 +72,10 @@ add_executable (GaussianPlyConverter
  mainPlyConverter.cpp
 )
 
+add_executable (GaussianPlyLODGenerator
+mainPlyLODGenerator.cpp
+)
+
 target_include_directories(GaussianHierarchyCreator PRIVATE dependencies/eigen)
 set_property(TARGET GaussianHierarchyCreator PROPERTY CXX_STANDARD 17)
 target_link_libraries(GaussianHierarchyCreator PUBLIC GaussianHierarchy)
@@ -87,3 +91,8 @@ target_link_libraries(GaussianHierarchyPlyGenerator PUBLIC GaussianHierarchy)
 target_include_directories(GaussianPlyConverter PRIVATE dependencies/eigen)
 set_property(TARGET GaussianPlyConverter PROPERTY CXX_STANDARD 17)
 target_link_libraries(GaussianPlyConverter PUBLIC GaussianHierarchy)
+
+target_include_directories(GaussianPlyLODGenerator PRIVATE dependencies/eigen)
+set_property(TARGET GaussianPlyLODGenerator PROPERTY CXX_STANDARD 17)
+target_link_libraries(GaussianPlyLODGenerator PUBLIC GaussianHierarchy)
+

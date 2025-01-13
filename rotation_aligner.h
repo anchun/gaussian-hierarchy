@@ -15,5 +15,5 @@
 class RotationAligner
 {
 public:
-	static void align(ExplicitTreeNode* root, std::vector<Gaussian>& gaussians);
+	static void align(ExplicitTreeNode* root, const std::vector<Gaussian>& gaussians);
 };
