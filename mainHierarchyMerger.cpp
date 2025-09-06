@@ -53,21 +53,6 @@ int main(int argc, char* argv[])
 	int sh_degree = std::stoi(argv[2]);
 	//bool writeSky = false;
 	{
-		std::string scaffold_path = rootpath + "/../scaffold/point_cloud/iteration_30000";
-		std::string txtfile = scaffold_path + "/pc_info.txt";
-		std::string plyfile = scaffold_path + "/point_cloud.ply";
-		std::ifstream scaffoldfile(txtfile.c_str());
-		std::vector<Gaussian> gaussians_sky;
-		if (scaffoldfile.good()) {
-			std::string line;
-			std::getline(scaffoldfile, line);
-			int skyboxpoints = std::atoi(line.c_str());
-			Loader::loadPly(plyfile.c_str(), gaussians_sky);
-			if(gaussians_sky.size() > skyboxpoints)
-				gaussians_sky.resize(skyboxpoints);
-			std::cout << "gaussians_sky count: " << gaussians_sky.size() << std::endl;
-		}
-
 		// Read chunk centers
 		std::string inpath(argv[3]);
 		std::vector<Eigen::Vector3f> chunk_centers(chunk_count);
@@ -130,7 +115,6 @@ int main(int argc, char* argv[])
 				gaussians, root, true);
 		}
 		else {
-			gaussians.insert(gaussians.begin(), gaussians_sky.begin(), gaussians_sky.end());
 			Writer::writePly(outputpath.c_str(), gaussians, sh_degree);
 		}
 	}
