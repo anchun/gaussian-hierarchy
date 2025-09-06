@@ -1,0 +1,7 @@
+# ninja log v5
+1	1684	1753070286788849044	/home/anchun/src/hierarchical-3d-gaussians/submodules/gaussianhierarchy/build/temp.linux-x86_64-cpython-312/traversal.o	20184a8d90bf39dd
+1	1736	1753070286843847611	/home/anchun/src/hierarchical-3d-gaussians/submodules/gaussianhierarchy/build/temp.linux-x86_64-cpython-312/hierarchy_writer.o	80e665254cfe81fc
+1	1792	1753070286895179607	/home/anchun/src/hierarchical-3d-gaussians/submodules/gaussianhierarchy/build/temp.linux-x86_64-cpython-312/hierarchy_loader.o	8cbc10ab9f0b35e7
+1	7114	1753070292218975497	/home/anchun/src/hierarchical-3d-gaussians/submodules/gaussianhierarchy/build/temp.linux-x86_64-cpython-312/runtime_switching.o	425d84548d66f4b2
+1	11816	1753070296915722484	/home/anchun/src/hierarchical-3d-gaussians/submodules/gaussianhierarchy/build/temp.linux-x86_64-cpython-312/ext.o	9bd59333b17ed883
+1	12405	1753070297502353228	/home/anchun/src/hierarchical-3d-gaussians/submodules/gaussianhierarchy/build/temp.linux-x86_64-cpython-312/torch/torch_interface.o	e6fa45b5f912a8e1
