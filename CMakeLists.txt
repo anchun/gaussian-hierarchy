@@ -36,7 +36,7 @@ add_library (GaussianHierarchy
 target_include_directories(GaussianHierarchy PRIVATE dependencies/eigen)
 
 set_property(TARGET GaussianHierarchy PROPERTY CXX_STANDARD 17)
-set_target_properties(GaussianHierarchy PROPERTIES CUDA_ARCHITECTURES "70;75;86")
+set_target_properties(GaussianHierarchy PROPERTIES CUDA_ARCHITECTURES "75;86;90;120")
 set(CMAKE_CUDA_STANDARD 17)
 
 target_include_directories(GaussianHierarchy
