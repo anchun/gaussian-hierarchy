@@ -12,11 +12,14 @@
 #pragma once
 
 #include "common.h"
+#include <limits>
 
 class ClusterMerger
 {
 private:
+	float max_merge_scale;
 	void mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>& leaf_gaussians);
 public:
+	explicit ClusterMerger(float max_merge_scale = std::numeric_limits<float>::infinity());
 	void merge(ExplicitTreeNode* root, const std::vector<Gaussian>& gaussians);
 };

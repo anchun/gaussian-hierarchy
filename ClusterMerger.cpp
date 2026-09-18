@@ -20,6 +20,10 @@ float ellipseSurface(Eigen::Vector3f scale)
 		scale[1] * scale[2];
 }
 
+ClusterMerger::ClusterMerger(float max_merge_scale) : max_merge_scale(max_merge_scale)
+{
+}
+
 void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>& leaf_gaussians)
 {
 	Gaussian clustered;
@@ -31,17 +35,31 @@ void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>
 	clustered.covariance = Cov::Zero();
 
 	std::vector<const Gaussian*> toMerge;
+	bool children_mergeable = true;
 	for (auto& child : node->children)
 	{
 		mergeRec(child, leaf_gaussians);
-		if(child->merged.size())
+		if (child->merged.size())
 			toMerge.push_back(&child->merged[0]);
+		else if (child->depth > 0)
+			children_mergeable = false;
 
 		for (auto& child_leaf : child->leaf_indices)
 			toMerge.push_back(&leaf_gaussians[child_leaf]);
 	}
 
 	if (node->depth == 0) {
+		Eigen::Vector4f diff = node->bounds.maxx - node->bounds.minn;
+		node->bounds.minn.w() = std::min(std::min(diff.x(), diff.y()), diff.z());
+		node->bounds.maxx.w() = std::max(std::max(diff.x(), diff.y()), diff.z());
+		return;
+	}
+
+	if (!children_mergeable || toMerge.size() != 2 ||
+		std::any_of(toMerge.begin(), toMerge.end(), [this](const Gaussian* g) {
+			return g->scale.maxCoeff() >= max_merge_scale;
+		}) ||
+		(toMerge[0]->position - toMerge[1]->position).squaredNorm() > max_merge_scale * max_merge_scale) {
 		Eigen::Vector4f diff = node->bounds.maxx - node->bounds.minn;
 		node->bounds.minn.w() = std::min(std::min(diff.x(), diff.y()), diff.z());
 		node->bounds.maxx.w() = std::max(std::max(diff.x(), diff.y()), diff.z());

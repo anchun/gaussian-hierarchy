@@ -9,6 +9,7 @@
 #include "hierarchy_explicit_loader.h"
 #include <vector>
 #include <array>
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
@@ -18,6 +19,50 @@
 
 #define LOD_LEVELS 6
 using json = nlohmann::json;
+
+void appendGaussian(
+	int index,
+	const std::vector<Eigen::Vector3f>& positions,
+	const std::vector<Eigen::Vector4f>& rotations,
+	const std::vector<Eigen::Vector3f>& log_scales,
+	const std::vector<float>& opacities,
+	const std::vector<SHs>& shs,
+	std::vector<Gaussian>& output)
+{
+	Gaussian gaussian;
+	gaussian.position = positions[index];
+	gaussian.rotation = rotations[index];
+	gaussian.scale = log_scales[index].array().exp();
+	gaussian.opacity = opacities[index];
+	gaussian.shs = shs[index];
+	output.emplace_back(gaussian);
+}
+
+void collectLOD(
+	int node_index,
+	int target_depth,
+	const std::vector<Node>& nodes,
+	const std::vector<Eigen::Vector3f>& positions,
+	const std::vector<Eigen::Vector4f>& rotations,
+	const std::vector<Eigen::Vector3f>& log_scales,
+	const std::vector<float>& opacities,
+	const std::vector<SHs>& shs,
+	std::vector<Gaussian>& output)
+{
+	const Node& node = nodes[node_index];
+	if (node.depth == 0) {
+		for (int i = 0; i < node.count_leafs; i++)
+			appendGaussian(node.start + i, positions, rotations, log_scales, opacities, shs, output);
+		return;
+	}
+	if (node.depth <= target_depth && node.count_merged > 0) {
+		for (int i = 0; i < node.count_merged; i++)
+			appendGaussian(node.start + node.count_leafs + i, positions, rotations, log_scales, opacities, shs, output);
+		return;
+	}
+	for (int i = 0; i < node.count_children; i++)
+		collectLOD(node.start_children + i, target_depth, nodes, positions, rotations, log_scales, opacities, shs, output);
+}
 
 void recTraverse(ExplicitTreeNode* node, int& zerocount)
 {
@@ -35,7 +80,13 @@ void recTraverse(ExplicitTreeNode* node, int& zerocount)
 int main(int argc, char* argv[])
 {
 	if (argc < 2)
-		throw std::runtime_error("Failed to pass args <ply_file_path(.ply)>");
+		throw std::runtime_error("Failed to pass args <ply_file_path(.ply)> [max_merge_scale_m]");
+
+	float max_merge_scale = 0.1f;
+	if (argc >= 3)
+		max_merge_scale = std::stof(argv[2]);
+	if (!std::isfinite(max_merge_scale) || max_merge_scale <= 0)
+		throw std::runtime_error("max_merge_scale_m must be finite and greater than zero");
 
 	uint32_t sh_degree = 0;
 	std::vector<Gaussian> gaussians;
@@ -62,7 +113,9 @@ int main(int argc, char* argv[])
 
 	std::cout << "Merging" << std::endl;
 
-	ClusterMerger merger;
+	std::cout << "Only merging Gaussians with max(scale) < " << max_merge_scale
+		<< " m and center distance <= " << max_merge_scale << " m" << std::endl;
+	ClusterMerger merger(max_merge_scale);
 	merger.merge(root, gaussians);
 
 	std::cout << "Fixing rotations" << std::endl;
@@ -76,22 +129,12 @@ int main(int argc, char* argv[])
 	std::vector<Node> basenodes;
 	std::vector<Box> boxes;
 	Writer::makeHierarchy(gaussians, root, positions, rotations, log_scales, opacities, shs, basenodes, boxes);
+	const size_t splats_count = gaussians.size();
 	gaussians.clear();
 
 	std::array<std::vector<Gaussian>, LOD_LEVELS> gaussianLODFiles;
-	for (size_t i = 0; i < basenodes.size(); i++) {
-		const Node& node = basenodes[i];
-		if (node.depth < 0 || node.depth >= LOD_LEVELS) {
-			continue;
-		}
-		Gaussian gaussian;
-		gaussian.position = positions[node.start];
-		gaussian.rotation = rotations[node.start];
-		gaussian.scale = log_scales[node.start].array().exp();
-		gaussian.opacity = opacities[node.start];
-		gaussian.shs = shs[node.start];
-		gaussianLODFiles[node.depth].emplace_back(gaussian);
-	}
+	for (int depth = 1; depth < LOD_LEVELS; depth++)
+		collectLOD(0, depth, basenodes, positions, rotations, log_scales, opacities, shs, gaussianLODFiles[depth]);
 
 	std::filesystem::path input_filepath(argv[1]);
 	// write lod ply files.
@@ -121,7 +164,7 @@ int main(int argc, char* argv[])
 	outfile << "\t\"source\": \"" << input_filepath.filename().string() << "\"," << std::endl;
 	outfile << "\t\"description\": \"Gaussian Splatting meta file with LOD definition.\"," << std::endl;
 	outfile << "\t\"shDegree\": " << sh_degree << "," << std::endl;
-	outfile << "\t\"splatsCount\": " << gaussianLODFiles[0].size() << "," << std::endl;
+	outfile << "\t\"splatsCount\": " << splats_count << "," << std::endl;
 	outfile << "\t\"splatsLODFiles\": [";
 	for (int i = 0; i < LOD_LEVELS; i++) {
 		outfile << "\"" << filenameLODs[i] << "\"";

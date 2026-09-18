@@ -11,9 +11,31 @@
 
 
 #include "loader.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <string>
+
+namespace
+{
+uint32_t finishPlyLoad(std::vector<Gaussian>& gaussians, uint32_t sh_degree)
+{
+	auto invalid_begin = std::remove_if(gaussians.begin(), gaussians.end(), [](const Gaussian& g) {
+		return !g.position.allFinite() || !g.shs.allFinite() || !std::isfinite(g.opacity) ||
+			!g.scale.allFinite() || (g.scale.array() <= 0).any() ||
+			!g.rotation.allFinite() || !g.covariance.allFinite();
+	});
+	const size_t invalid_count = std::distance(invalid_begin, gaussians.end());
+	gaussians.erase(invalid_begin, gaussians.end());
+	if (invalid_count > 0)
+		std::cout << "Skipping " << invalid_count << " non-finite Gaussian(s) from PLY" << std::endl;
+	if (gaussians.empty())
+		throw std::runtime_error("PLY contains no valid Gaussians!");
+	return sh_degree;
+}
+}
 
 uint32_t Loader::loadPlyDir(const char* filename, std::vector<Gaussian>& gaussians)
 {
@@ -96,17 +118,57 @@ uint32_t Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians,
 	}
 
 	int property_count = 0;
+	std::vector<std::string> property_names;
 	while (std::getline(infile, buff))
 	{
 		if (buff.compare("end_header") == 0)
 			break;
-		if(buff.find_first_of("property") == 0)
+		std::stringstream ss(buff);
+		std::string keyword;
+		ss >> keyword;
+		if (keyword == "property") {
+			std::string property_type;
+			std::string property_name;
+			ss >> property_type >> property_name;
 			property_count++;
+			property_names.push_back(property_name);
+		}
 	}
 
-	gaussians.resize(count - skyboxpoints);
+	if (count <= skyboxpoints)
+		throw std::runtime_error("PLY contains no Gaussians after skipping skybox points!");
 
-	if (property_count == sizeof(RichPoint) / sizeof(float)) {
+	const std::vector<std::string> reordered_degree0_properties = {
+		"x", "y", "z", "rot_0", "rot_1", "rot_2", "rot_3",
+		"scale_0", "scale_1", "scale_2", "opacity", "f_dc_0", "f_dc_1", "f_dc_2"
+	};
+
+	if (property_names == reordered_degree0_properties) {
+		std::vector<std::array<float, 14>> points(count);
+		infile.read((char*)points.data(), count * sizeof(points[0]));
+		if (!infile)
+			throw std::runtime_error("Unexpected end of PLY vertex data!");
+
+		gaussians.resize(count - skyboxpoints);
+		for (int i = 0; i < gaussians.size(); i++)
+		{
+			Gaussian& g = gaussians[i];
+			const auto& p = points[skyboxpoints + i];
+
+			g.position = Eigen::Vector3f(p[0], p[1], p[2]);
+			g.rotation = Eigen::Vector4f(p[3], p[4], p[5], p[6]).normalized();
+			g.scale = Eigen::Vector3f(p[7], p[8], p[9]).array().exp();
+			g.opacity = sigmoid(p[10]);
+			g.shs.setZero();
+			g.shs[0] = p[11];
+			g.shs[1] = p[12];
+			g.shs[2] = p[13];
+			computeCovariance(g.scale, g.rotation, g.covariance);
+		}
+		return finishPlyLoad(gaussians, 0);
+	}
+	else if (property_count == sizeof(RichPoint) / sizeof(float)) {
+		gaussians.resize(count - skyboxpoints);
 		std::vector<RichPoint> points(count);
 		infile.read((char*)points.data(), count * sizeof(RichPoint));
 
@@ -130,9 +192,10 @@ uint32_t Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians,
 			}
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
-		return 3; //sh_degree
+		return finishPlyLoad(gaussians, 3); //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree1WithNormal) / sizeof(float)) {
+		gaussians.resize(count - skyboxpoints);
 		std::vector<RichPointDegree1WithNormal> points(count);
 		infile.read((char*)points.data(), count * sizeof(RichPointDegree1WithNormal));
 
@@ -156,9 +219,10 @@ uint32_t Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians,
 			}
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
-		return 1; //sh_degree
+		return finishPlyLoad(gaussians, 1); //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree1) / sizeof(float)) {
+		gaussians.resize(count - skyboxpoints);
 		std::vector<RichPointDegree1> points(count);
 		infile.read((char*)points.data(), count * sizeof(RichPointDegree1));
 
@@ -182,9 +246,10 @@ uint32_t Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians,
 			}
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
-		return 1; //sh_degree
+		return finishPlyLoad(gaussians, 1); //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree0WithNormal) / sizeof(float)) {
+		gaussians.resize(count - skyboxpoints);
 		std::vector<RichPointDegree0WithNormal> points(count);
 		infile.read((char*)points.data(), count * sizeof(RichPointDegree0WithNormal));
 
@@ -202,9 +267,10 @@ uint32_t Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians,
 				g.shs[j] = p.shs[j];
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
-		return 0; //sh_degree
+		return finishPlyLoad(gaussians, 0); //sh_degree
 	}
 	else if (property_count == sizeof(RichPointDegree0) / sizeof(float)) {
+		gaussians.resize(count - skyboxpoints);
 		std::vector<RichPointDegree0> points(count);
 		infile.read((char*)points.data(), count * sizeof(RichPointDegree0));
 
@@ -222,7 +288,7 @@ uint32_t Loader::loadPly(const char* filename, std::vector<Gaussian>& gaussians,
 				g.shs[j] = p.shs[j];
 			computeCovariance(g.scale, g.rotation, g.covariance);
 		}
-		return 0; //sh_degree
+		return finishPlyLoad(gaussians, 0); //sh_degree
 	}
 	else {
 		std::cout << "Invalid ply files with property_count" << property_count << std::endl;
