@@ -20,7 +20,10 @@ float ellipseSurface(Eigen::Vector3f scale)
 		scale[1] * scale[2];
 }
 
-ClusterMerger::ClusterMerger(float max_merge_scale) : max_merge_scale(max_merge_scale)
+ClusterMerger::ClusterMerger(
+	float max_merge_scale,
+	std::function<bool(const Gaussian&)> merge_predicate)
+	: max_merge_scale(max_merge_scale), merge_predicate(std::move(merge_predicate))
 {
 }
 
@@ -56,6 +59,9 @@ void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>
 	}
 
 	if (!children_mergeable || toMerge.size() != 2 ||
+		(merge_predicate && std::any_of(toMerge.begin(), toMerge.end(), [this](const Gaussian* g) {
+			return !merge_predicate(*g);
+		})) ||
 		std::any_of(toMerge.begin(), toMerge.end(), [this](const Gaussian* g) {
 			return g->scale.maxCoeff() >= max_merge_scale;
 		}) ||
@@ -91,6 +97,12 @@ void ClusterMerger::mergeRec(ExplicitTreeNode* node, const std::vector<Gaussian>
 
 		clustered.position += a * g->position;
 		clustered.shs += a * g->shs;
+	}
+	if (merge_predicate && !merge_predicate(clustered)) {
+		Eigen::Vector4f diff = node->bounds.maxx - node->bounds.minn;
+		node->bounds.minn.w() = std::min(std::min(diff.x(), diff.y()), diff.z());
+		node->bounds.maxx.w() = std::max(std::max(diff.x(), diff.y()), diff.z());
+		return;
 	}
 
 	for (int i = 0; i < toMerge.size(); i++)
