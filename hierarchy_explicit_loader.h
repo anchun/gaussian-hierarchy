@@ -16,6 +16,7 @@
 #include "common.h"
 #include <iostream>
 #include <fstream>
+#include <unordered_set>
 
 class HierarchyExplicitLoader
 {
@@ -23,5 +24,7 @@ public:
 
 	static void loadExplicit(const char* filename,
 		std::vector<Gaussian>& gaussian, ExplicitTreeNode* root,
-		int chunk_id, std::vector<Eigen::Vector3f>& chunk_centers);
+		int chunk_id, std::vector<Eigen::Vector3f>& chunk_centers,
+		const std::unordered_set<int>* excluded_nodes = nullptr,
+		bool route_ownership = false);
 };

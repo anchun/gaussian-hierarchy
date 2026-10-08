@@ -17,6 +17,7 @@
 #include <Eigen/Dense>
 #include <iostream>
 #include <fstream>
+#include <string>
 
 class HierarchyLoader
 {
@@ -29,5 +30,13 @@ public:
 		std::vector<Eigen::Vector4f>& rot,
 		std::vector<Node>& nodes,
 		std::vector<Box>& boxes);
+
+	static bool loadAdaptiveUnits(const char* filename,
+		float target_extent,
+		std::vector<int>& node_ids,
+		std::vector<Box>& unit_boxes,
+		int& selected_depth,
+		std::string& error,
+		int requested_depth = -1);
 	
 };

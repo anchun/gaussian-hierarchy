@@ -16,6 +16,8 @@
 #include <iostream>
 #include <fstream>
 #include "half.hpp"
+#include <algorithm>
+#include <limits>
 
 struct HalfBox2
 {
@@ -144,4 +146,169 @@ void HierarchyLoader::load(const char* filename,
 			}
 		}
 	}
+}
+
+bool HierarchyLoader::loadAdaptiveUnits(const char* filename,
+	float target_extent,
+	std::vector<int>& node_ids,
+	std::vector<Box>& unit_boxes,
+	int& selected_depth,
+	std::string& error,
+	int requested_depth)
+{
+	std::ifstream infile(filename, std::ios_base::binary);
+	if (!infile.good())
+	{
+		error = std::string("cannot open hierarchy ") + filename;
+		return false;
+	}
+	int point_count;
+	infile.read(reinterpret_cast<char*>(&point_count), sizeof(int));
+	if (!infile.good() || point_count == std::numeric_limits<int>::min())
+	{
+		error = std::string("invalid hierarchy header in ") + filename;
+		return false;
+	}
+	const bool compressed = point_count < 0;
+	const std::size_t gaussian_count = static_cast<std::size_t>(std::abs(point_count));
+	const std::size_t gaussian_record_bytes = compressed
+		? 3 * sizeof(float) + (4 + 3 + 1 + 48) * sizeof(half_float::half)
+		: (3 + 48 + 1 + 3 + 4) * sizeof(float);
+	infile.seekg(static_cast<std::streamoff>(gaussian_count * gaussian_record_bytes), std::ios_base::cur);
+	int node_count;
+	infile.read(reinterpret_cast<char*>(&node_count), sizeof(int));
+	if (!infile.good() || node_count <= 0)
+	{
+		error = std::string("invalid hierarchy topology in ") + filename;
+		return false;
+	}
+
+	constexpr std::size_t kBlockSize = 1 << 20;
+	std::vector<unsigned char> depths(static_cast<std::size_t>(node_count));
+	int maximum_depth = 0;
+	for (std::size_t offset = 0; offset < static_cast<std::size_t>(node_count); offset += kBlockSize)
+	{
+		const std::size_t count = std::min(kBlockSize, static_cast<std::size_t>(node_count) - offset);
+		if (compressed)
+		{
+			std::vector<HalfNode> nodes(count);
+			infile.read(reinterpret_cast<char*>(nodes.data()), count * sizeof(HalfNode));
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const int depth = nodes[index].dccc[0];
+				if (depth < 0 || depth > 255)
+				{
+					error = "hierarchy node depth is out of range";
+					return false;
+				}
+				depths[offset + index] = static_cast<unsigned char>(depth);
+				maximum_depth = std::max(maximum_depth, depth);
+			}
+		}
+		else
+		{
+			std::vector<Node> nodes(count);
+			infile.read(reinterpret_cast<char*>(nodes.data()), count * sizeof(Node));
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const int depth = nodes[index].depth;
+				if (depth < 0 || depth > 255)
+				{
+					error = "hierarchy node depth is out of range";
+					return false;
+				}
+				depths[offset + index] = static_cast<unsigned char>(depth);
+				maximum_depth = std::max(maximum_depth, depth);
+			}
+		}
+		if (!infile.good())
+		{
+			error = "failed while reading hierarchy nodes";
+			return false;
+		}
+	}
+
+	const int minimum_candidate_depth = std::max(0, maximum_depth - 20);
+	std::vector<std::vector<std::pair<int, Box>>> candidates(static_cast<std::size_t>(maximum_depth + 1));
+	for (std::size_t offset = 0; offset < static_cast<std::size_t>(node_count); offset += kBlockSize)
+	{
+		const std::size_t count = std::min(kBlockSize, static_cast<std::size_t>(node_count) - offset);
+		if (compressed)
+		{
+			std::vector<HalfBox2> boxes(count);
+			infile.read(reinterpret_cast<char*>(boxes.data()), count * sizeof(HalfBox2));
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const int depth = depths[offset + index];
+				if (depth < minimum_candidate_depth)
+					continue;
+				Box box;
+				for (int axis = 0; axis < 4; ++axis)
+				{
+					box.minn[axis] = boxes[index].minn[axis];
+					box.maxx[axis] = boxes[index].maxx[axis];
+				}
+				candidates[depth].emplace_back(static_cast<int>(offset + index), box);
+			}
+		}
+		else
+		{
+			std::vector<Box> boxes(count);
+			infile.read(reinterpret_cast<char*>(boxes.data()), count * sizeof(Box));
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const int depth = depths[offset + index];
+				if (depth >= minimum_candidate_depth)
+					candidates[depth].emplace_back(static_cast<int>(offset + index), boxes[index]);
+			}
+		}
+		if (!infile.good())
+		{
+			error = "failed while reading hierarchy boxes";
+			return false;
+		}
+	}
+
+	if (requested_depth >= 0)
+	{
+		if (requested_depth < minimum_candidate_depth || requested_depth > maximum_depth
+			|| candidates[requested_depth].empty())
+		{
+			error = "requested ownership depth is unavailable";
+			return false;
+		}
+		selected_depth = requested_depth;
+	}
+	else
+	{
+		selected_depth = minimum_candidate_depth;
+		for (int depth = maximum_depth; depth >= minimum_candidate_depth; --depth)
+		{
+			if (candidates[depth].empty())
+				continue;
+			std::vector<float> extents;
+			extents.reserve(candidates[depth].size());
+			for (const auto& candidate : candidates[depth])
+				extents.push_back((candidate.second.maxx.head<3>() - candidate.second.minn.head<3>()).maxCoeff());
+			const std::size_t middle = extents.size() / 2;
+			std::nth_element(extents.begin(), extents.begin() + middle, extents.end());
+			selected_depth = depth;
+			if (extents[middle] <= target_extent)
+				break;
+		}
+	}
+
+	node_ids.reserve(candidates[selected_depth].size());
+	unit_boxes.reserve(candidates[selected_depth].size());
+	for (const auto& candidate : candidates[selected_depth])
+	{
+		node_ids.push_back(candidate.first);
+		unit_boxes.push_back(candidate.second);
+	}
+	if (node_ids.empty())
+	{
+		error = "hierarchy has no adaptive ownership units";
+		return false;
+	}
+	return true;
 }

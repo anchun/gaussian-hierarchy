@@ -18,6 +18,24 @@
 #include <iostream>
 #include <fstream>
 #include "half.hpp"
+#include "AvgMerger.h"
+#include <unordered_set>
+
+Gaussian getRepresentativeGaussian(
+	const ExplicitTreeNode* node,
+	const std::vector<Gaussian>& gaussians)
+{
+	if (!node->merged.empty())
+		return node->merged.front();
+	if (!node->leaf_indices.empty())
+		return gaussians[node->leaf_indices.front()];
+	for (const ExplicitTreeNode* child : node->children)
+	{
+		if (!child->merged.empty() || !child->leaf_indices.empty() || !child->children.empty())
+			return getRepresentativeGaussian(child, gaussians);
+	}
+	throw std::runtime_error("Hierarchy contains no representative Gaussian");
+}
 
 float getWeight(Eigen::Vector3f& pos, int chunk_id,
 	std::vector<Eigen::Vector3f>& chunk_centers)
@@ -64,12 +82,16 @@ std::vector<ExplicitTreeNode*> buildTreeRec(ExplicitTreeNode* expliciteNode,
 	std::vector<Eigen::Vector3f>& scales,
 	std::vector<Eigen::Vector4f>& rot,
 	std::vector<Node>& nodes,
-	std::vector<Box>& boxes)
+	std::vector<Box>& boxes,
+	const std::unordered_set<int>* excluded_nodes,
+	bool route_ownership)
 {
+	if (excluded_nodes != nullptr && excluded_nodes->count(node_id) != 0)
+		return {};
 	expliciteNode->depth = node.depth;
 	expliciteNode->bounds = boxes[node_id];
 	int n_valid_gaussians = 0;
-	if (node.depth > 0)
+	if (node.depth > 0 && !route_ownership)
 	{
 		for (int n(0); n < node.count_merged; n++)
 		{
@@ -92,7 +114,7 @@ std::vector<ExplicitTreeNode*> buildTreeRec(ExplicitTreeNode* expliciteNode,
 	{
 		for (int n(0); n < node.count_leafs; n++)
 		{
-			float weigth = getWeight(pos[node.start + n], chunk_id, chunk_centers);
+			float weigth = route_ownership ? 1.f : getWeight(pos[node.start + n], chunk_id, chunk_centers);
 			if (weigth > 0.f)
 			{
 				n_valid_gaussians++;
@@ -115,9 +137,21 @@ std::vector<ExplicitTreeNode*> buildTreeRec(ExplicitTreeNode* expliciteNode,
 		ExplicitTreeNode* newNode = new ExplicitTreeNode;
 		std::vector<ExplicitTreeNode*> newChildren = buildTreeRec(newNode, gaussians, chunk_id, chunk_centers,
 			nodes[node.start_children + i], node.start_children + i,
-			pos, shs, alphas, scales, rot, nodes, boxes
+			pos, shs, alphas, scales, rot, nodes, boxes, excluded_nodes, route_ownership
 		);
 		children.insert(children.end(), newChildren.begin(), newChildren.end());
+	}
+	if (route_ownership && node.depth > 0)
+	{
+		if (children.empty())
+			return {};
+		expliciteNode->children = children;
+		std::vector<Gaussian> representatives;
+		representatives.reserve(children.size());
+		for (const ExplicitTreeNode* child : children)
+			representatives.push_back(getRepresentativeGaussian(child, gaussians));
+		expliciteNode->merged.push_back(AvgMerger::mergeGaussians(representatives));
+		return {expliciteNode};
 	}
 
 	if (n_valid_gaussians > 0)
@@ -133,7 +167,9 @@ std::vector<ExplicitTreeNode*> buildTreeRec(ExplicitTreeNode* expliciteNode,
 
 void HierarchyExplicitLoader::loadExplicit(
 	const char* filename, std::vector<Gaussian>& gaussians, ExplicitTreeNode* root,
-	int chunk_id, std::vector<Eigen::Vector3f>& chunk_centers)
+	int chunk_id, std::vector<Eigen::Vector3f>& chunk_centers,
+	const std::unordered_set<int>* excluded_nodes,
+	bool route_ownership)
 {
 	std::vector<Eigen::Vector3f> pos;
 	std::vector<SHs> shs;
@@ -145,5 +181,19 @@ void HierarchyExplicitLoader::loadExplicit(
 	HierarchyLoader::load(filename, pos, shs, alphas, scales, rot, nodes, boxes);
 
 	pos[0] = chunk_centers[chunk_id];
-	buildTreeRec(root, gaussians, chunk_id, chunk_centers, nodes[0], 0, pos, shs, alphas, scales, rot, nodes, boxes);
+	std::vector<ExplicitTreeNode*> loaded_roots = buildTreeRec(
+		root, gaussians, chunk_id, chunk_centers,
+		nodes[0], 0, pos, shs, alphas, scales, rot, nodes, boxes,
+		excluded_nodes, route_ownership);
+	if (loaded_roots.size() == 1 && loaded_roots.front() == root)
+		return;
+	if (loaded_roots.empty())
+		throw std::runtime_error("Hierarchy has no Gaussians after applying merge weights");
+
+	root->children = loaded_roots;
+	std::vector<Gaussian> representatives;
+	representatives.reserve(loaded_roots.size());
+	for (const ExplicitTreeNode* loaded_root : loaded_roots)
+		representatives.push_back(getRepresentativeGaussian(loaded_root, gaussians));
+	root->merged.push_back(AvgMerger::mergeGaussians(representatives));
 }
