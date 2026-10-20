@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <filesystem>
 #include <limits>
 #include <unordered_map>
 
@@ -151,7 +152,8 @@ float routePosition(const Eigen::Vector3f& point, const ChunkRouteInfo& route)
 float supportScore(
 	const Box& bounds,
 	const ChunkRouteInfo& route,
-	const std::vector<CameraSupport>& cameras)
+	const std::vector<CameraSupport>& cameras,
+	bool spatial = false)
 {
 	if (cameras.empty())
 		return 0.f;
@@ -165,7 +167,8 @@ float supportScore(
 	std::size_t context_count = 0;
 	for (const CameraSupport& camera : cameras)
 	{
-		if (std::abs(camera.route_position - center_route) > route_radius)
+		if (spatial ? (camera.position - center).head<2>().norm() > route_radius
+			: std::abs(camera.route_position - center_route) > route_radius)
 			continue;
 		if (camera.core)
 			++core_count;
@@ -345,6 +348,237 @@ bool loadCameraSupport(
 		return left.route_position < right.route_position;
 	});
 	return true;
+}
+
+bool loadSpatialCameraSupport(
+	const std::string& path, const SpatialChunkInfo& info,
+	std::vector<CameraSupport>& cameras, std::string& error)
+{
+	json values;
+	cameras.clear();
+	if (!readJson(path, values, error))
+		return false;
+	try
+	{
+		if (!values.is_array() || values.empty())
+			throw std::runtime_error("camera metadata must be a non-empty array");
+		std::sort(values.begin(), values.end(), [](const json& a, const json& b) {
+			return a.at("img_name").get<std::string>() < b.at("img_name").get<std::string>();
+		});
+		for (const json& value : values)
+		{
+			const auto position = value.at("position").get<std::vector<float>>();
+			const auto rotation = value.at("rotation").get<std::vector<std::vector<float>>>();
+			if (position.size() != 3 || rotation.size() != 3
+				|| rotation[0].size() != 3 || rotation[1].size() != 3 || rotation[2].size() != 3)
+				throw std::runtime_error("invalid camera pose dimensions");
+			CameraSupport camera;
+			camera.position = Eigen::Vector3f(position[0], position[1], position[2]);
+			for (int row = 0; row < 3; ++row)
+				for (int col = 0; col < 3; ++col)
+					camera.rotation(row, col) = rotation[row][col];
+			camera.fx = value.at("fx").get<float>();
+			camera.fy = value.at("fy").get<float>();
+			camera.width = value.at("width").get<float>();
+			camera.height = value.at("height").get<float>();
+			if (!camera.position.allFinite() || !camera.rotation.allFinite()
+				|| !std::isfinite(camera.fx) || !std::isfinite(camera.fy)
+				|| !std::isfinite(camera.width) || !std::isfinite(camera.height)
+				|| camera.fx <= 0.f || camera.fy <= 0.f || camera.width <= 0.f || camera.height <= 0.f)
+				throw std::runtime_error("invalid camera pose or intrinsics");
+			const std::string name = std::filesystem::path(value.at("img_name").get<std::string>()).filename().string();
+			camera.core = info.core_frame_names.count(name) != 0;
+			cameras.push_back(camera);
+		}
+	}
+	catch (const std::exception& exception)
+	{
+		error = "invalid spatial camera metadata in " + path + ": " + exception.what();
+		return false;
+	}
+	return true;
+}
+
+SpatialOwnershipPlan buildSpatialOwnership(
+	const std::vector<std::vector<OwnershipUnit>>& units,
+	const std::vector<SpatialChunkInfo>& infos,
+	const std::vector<std::vector<CameraSupport>>& cameras)
+{
+	if (units.empty() || units.size() != infos.size() || units.size() != cameras.size())
+		throw std::runtime_error("inconsistent spatial ownership inputs");
+	SpatialOwnershipPlan plan;
+	plan.excluded_nodes.resize(units.size());
+	const float extent = spatialOwnershipExtent(infos.front());
+	const float match_distance = static_cast<float>(std::clamp(infos.front().overlap / 100., 0.25, 0.5));
+	const float cell_size = std::max(extent, 2.f * match_distance);
+	struct Unit
+	{
+		int chunk;
+		const OwnershipUnit* value;
+		bool eligible;
+		bool core = false;
+		bool strict_core = false;
+		float support = 0.f;
+	};
+	std::vector<Unit> all;
+	std::unordered_map<GridKey, std::vector<std::size_t>, GridKeyHash> grid;
+	for (std::size_t chunk = 0; chunk < units.size(); ++chunk)
+	{
+		if (!infos[chunk].spatial)
+			throw std::runtime_error("spatial ownership requires validated spatial metadata");
+		std::unordered_set<int> ids;
+		for (const OwnershipUnit& unit : units[chunk])
+		{
+			if (unit.node_id < 0 || !ids.insert(unit.node_id).second)
+				throw std::runtime_error("invalid or duplicate spatial ownership node id");
+			const Eigen::Vector3f size = boxMaximum(unit.bounds) - boxMinimum(unit.bounds);
+			// Large, degenerate or unrepresentable boxes are uncertain, never an all-pairs fallback.
+			bool eligible = boxMinimum(unit.bounds).allFinite() && boxMaximum(unit.bounds).allFinite()
+				&& (size.array() > 0.f).all() && size.maxCoeff() <= extent * 1.001f
+				&& boxCenter(unit.bounds).cwiseAbs().maxCoeff() / cell_size < 1e8f;
+			Eigen::Vector3i minimum, maximum;
+			if (eligible)
+			{
+				minimum = minimumCell(unit.bounds, match_distance, cell_size);
+				maximum = maximumCell(unit.bounds, match_distance, cell_size);
+				eligible = cellCount(minimum, maximum) <= 512;
+			}
+			const std::size_t index = all.size();
+			all.push_back({static_cast<int>(chunk), &unit, eligible});
+			if (!eligible)
+			{
+				++plan.stats.uncertain_units;
+				continue;
+			}
+			for (int x = minimum.x(); x <= maximum.x(); ++x)
+				for (int y = minimum.y(); y <= maximum.y(); ++y)
+					for (int z = minimum.z(); z <= maximum.z(); ++z)
+						grid[{x, y, z}].push_back(index);
+		}
+	}
+	plan.stats.units = all.size();
+	struct Best
+	{
+		std::size_t index;
+		float distance;
+	};
+	std::vector<std::unordered_map<int, Best>> best(all.size());
+	std::vector<std::size_t> seen(all.size(), all.size());
+	auto consider = [&](std::size_t from, std::size_t to, float distance) {
+		auto& neighbors = best[from];
+		const auto found = neighbors.find(all[to].chunk);
+		if (found == neighbors.end() || distance < found->second.distance
+			|| (distance == found->second.distance
+				&& all[to].value->node_id < all[found->second.index].value->node_id))
+			neighbors[all[to].chunk] = {to, distance};
+	};
+	for (std::size_t index = 0; index < all.size(); ++index)
+	{
+		if (!all[index].eligible)
+			continue;
+		const Box& bounds = all[index].value->bounds;
+		const Eigen::Vector3i minimum = minimumCell(bounds, 0.f, cell_size);
+		const Eigen::Vector3i maximum = maximumCell(bounds, 0.f, cell_size);
+		for (int x = minimum.x(); x <= maximum.x(); ++x)
+			for (int y = minimum.y(); y <= maximum.y(); ++y)
+				for (int z = minimum.z(); z <= maximum.z(); ++z)
+				{
+					const auto found = grid.find({x, y, z});
+					if (found == grid.end())
+						continue;
+					for (const std::size_t other : found->second)
+					{
+						if (other <= index || all[index].chunk == all[other].chunk || seen[other] == index)
+							continue;
+						seen[other] = index;
+						const Box& other_bounds = all[other].value->bounds;
+						const float gap = boxGap(bounds, other_bounds);
+						const float center_distance = (boxCenter(bounds) - boxCenter(other_bounds)).norm();
+						const Eigen::Vector3f size = boxMaximum(bounds) - boxMinimum(bounds);
+						const Eigen::Vector3f other_size = boxMaximum(other_bounds) - boxMinimum(other_bounds);
+						if (gap > match_distance || center_distance > match_distance
+							|| boxOverlapCoverage(bounds, other_bounds) < 0.9f
+							|| (size.cwiseMin(other_size).array() / size.cwiseMax(other_size).array() < 0.8f).any())
+							continue;
+						const float distance = gap + 0.01f * center_distance;
+						consider(index, other, distance);
+						consider(other, index, distance);
+					}
+				}
+	}
+	std::vector<std::vector<std::size_t>> adjacent(all.size());
+	for (std::size_t index = 0; index < all.size(); ++index)
+	{
+		for (const auto& entry : best[index])
+		{
+			const std::size_t other = entry.second.index;
+			const auto reverse = best[other].find(all[index].chunk);
+			if (index < other && reverse != best[other].end() && reverse->second.index == index)
+			{
+				adjacent[index].push_back(other);
+				adjacent[other].push_back(index);
+				++plan.stats.matched_pairs;
+			}
+		}
+	}
+	std::vector<std::size_t> order;
+	ChunkRouteInfo spatial_support;
+	spatial_support.context_distance = static_cast<float>(std::min(
+		std::max({infos.front().context_distance, 2. * infos.front().overlap, static_cast<double>(extent)}),
+		static_cast<double>(std::numeric_limits<float>::max())));
+	for (std::size_t index = 0; index < all.size(); ++index)
+	{
+		if (adjacent[index].empty())
+		{
+			++plan.stats.unmatched_units;
+			continue;
+		}
+		Unit& unit = all[index];
+		const Eigen::Vector2d xy = boxCenter(unit.value->bounds).head<2>().cast<double>();
+		unit.core = spatialOwner(infos[unit.chunk], xy) == infos[unit.chunk].chunk_id;
+		bool boundary = false;
+		int node_index = 0;
+		while (infos.front().tree[node_index].chunk_id < 0)
+		{
+			const SpatialPartitionNode& node = infos.front().tree[node_index];
+			boundary = boundary || std::abs(xy[node.axis] - node.cut) <= match_distance;
+			node_index = xy[node.axis] < node.cut ? node.left : node.right;
+		}
+		unit.strict_core = unit.core && !boundary;
+		unit.support = supportScore(unit.value->bounds, spatial_support, cameras[unit.chunk], true);
+		order.push_back(index);
+	}
+	std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+		const Unit& left = all[a];
+		const Unit& right = all[b];
+		if (left.strict_core != right.strict_core)
+			return left.strict_core > right.strict_core;
+		if (left.support != right.support)
+			return left.support > right.support;
+		if (left.core != right.core)
+			return left.core > right.core;
+		if (infos[left.chunk].chunk_id != infos[right.chunk].chunk_id)
+			return infos[left.chunk].chunk_id < infos[right.chunk].chunk_id;
+		return left.value->node_id < right.value->node_id;
+	});
+	// Retained representatives are permanent. Only their directly reciprocal-matched,
+	// still-undecided neighbors can be excluded; a transitive chain is not a duplicate group.
+	std::vector<unsigned char> state(all.size(), 0);
+	for (const std::size_t index : order)
+	{
+		if (state[index] != 0)
+			continue;
+		state[index] = 1;
+		for (const std::size_t other : adjacent[index])
+		{
+			if (state[other] != 0)
+				continue;
+			state[other] = 2;
+			plan.excluded_nodes[all[other].chunk].insert(all[other].value->node_id);
+			++plan.stats.excluded_units;
+		}
+	}
+	return plan;
 }
 
 RouteOwnershipPlan buildRouteOwnership(

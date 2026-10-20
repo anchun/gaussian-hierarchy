@@ -44,8 +44,8 @@ void recTraverse(ExplicitTreeNode* node, int& zerocount)
 
 int main(int argc, char* argv[])
 {
-	if (argc < 5)
-		throw std::runtime_error("Failed to pass filename");
+	if (argc < 6)
+		throw std::runtime_error("Expected trained root, SH degree, source root, output and at least one chunk");
 
 	int chunk_count(argc - 5);
 	std::string rootpath(argv[1]);
@@ -53,6 +53,21 @@ int main(int argc, char* argv[])
 	int sh_degree = std::stoi(argv[2]);
 	const bool write_ply = outputpath.size() >= 4
 		&& outputpath.substr(outputpath.size() - 4) == ".ply";
+	const std::string inpath(argv[3]);
+	std::vector<std::string> source_directories, trained_directories;
+	for (int chunk = 0; chunk < chunk_count; ++chunk)
+	{
+		source_directories.push_back(inpath + "/" + argv[chunk + 5]);
+		trained_directories.push_back(rootpath + "/" + argv[chunk + 5]);
+	}
+	std::vector<SpatialChunkInfo> spatial_infos;
+	bool spatial_ownership = false;
+	std::string spatial_error;
+	if (!validateSpatialChunkSet(source_directories, trained_directories,
+		spatial_infos, spatial_ownership, spatial_error))
+		throw std::runtime_error(spatial_error);
+	if (!spatial_ownership)
+		std::cout << "No spatial metadata: preserving legacy/corridor merge policy" << std::endl;
 	{
 		std::vector<Gaussian> scaffold_gaussians;
 		if (write_ply)
@@ -87,7 +102,6 @@ int main(int argc, char* argv[])
 		}
 
 		// Read chunk centers
-		std::string inpath(argv[3]);
 		std::vector<Eigen::Vector3f> chunk_centers(chunk_count);
 		for (int chunk_id(0); chunk_id < chunk_count; chunk_id++)
 		{
@@ -109,7 +123,34 @@ int main(int argc, char* argv[])
 
 		bool route_ownership = false;
 		RouteOwnershipPlan ownership_plan;
-		if (chunk_count == 2)
+		SpatialOwnershipPlan spatial_plan;
+		if (spatial_ownership)
+		{
+			std::vector<std::vector<OwnershipUnit>> units(chunk_count);
+			std::vector<std::vector<CameraSupport>> cameras(chunk_count);
+			const float extent = spatialOwnershipExtent(spatial_infos.front());
+			for (int chunk = 0; chunk < chunk_count; ++chunk)
+			{
+				std::vector<int> ids;
+				std::vector<Box> boxes;
+				if (!HierarchyLoader::loadSpatialFrontier(hierarchy_paths[chunk].c_str(),
+					extent, ids, boxes, spatial_error)
+					|| !loadSpatialCameraSupport(trained_directories[chunk] + "/cameras.json",
+						spatial_infos[chunk], cameras[chunk], spatial_error))
+					throw std::runtime_error(spatial_error);
+				for (std::size_t index = 0; index < ids.size(); ++index)
+					units[chunk].push_back({ids[index], boxes[index]});
+			}
+			spatial_plan = buildSpatialOwnership(units, spatial_infos, cameras);
+			std::cout << "Spatial ownership: " << chunk_count << " chunks, "
+				<< spatial_plan.stats.units << " complete-frontier units, "
+				<< spatial_plan.stats.matched_pairs << " reciprocal pairs, "
+				<< spatial_plan.stats.excluded_units << " directly matched copies excluded, "
+				<< spatial_plan.stats.unmatched_units << " unmatched units retained (100%), "
+				<< spatial_plan.stats.uncertain_units << " uncertain-size/invalid-box units retained"
+				<< "; no center-distance opacity falloff" << std::endl;
+		}
+		else if (chunk_count == 2)
 		{
 			ChunkRouteInfo routes[2];
 			std::vector<CameraSupport> cameras[2];
@@ -203,8 +244,7 @@ int main(int argc, char* argv[])
 			std::cerr << "Warning: route ownership currently requires exactly two chunks; "
 				<< "using center-distance fallback" << std::endl;
 		}
-		// Read per chunk hierarchies and discard unwanted primitives 
-		// using route structure ownership, or center distance as fallback
+		// Spatial ownership is active even when no reliable duplicate pair was found.
 		std::vector<Gaussian> gaussians; 
 		ExplicitTreeNode* root = new ExplicitTreeNode;
 
@@ -216,12 +256,19 @@ int main(int argc, char* argv[])
 			std::cout << "Hierarchy file path: " << hierpath << std::endl;
 			
 			ExplicitTreeNode* chunkRoot = new ExplicitTreeNode;
-			HierarchyExplicitLoader::loadExplicit(
+			const bool contributes = HierarchyExplicitLoader::loadExplicit(
 				hierpath.c_str(), gaussians, chunkRoot, chunk_id, chunk_centers,
-				route_ownership ? &ownership_plan.excluded_nodes[chunk_id] : nullptr,
-				route_ownership);
+				spatial_ownership ? &spatial_plan.excluded_nodes[chunk_id]
+					: (route_ownership ? &ownership_plan.excluded_nodes[chunk_id] : nullptr),
+				route_ownership, spatial_ownership);
+			if (!contributes)
+			{
+				delete chunkRoot;
+				std::cout << "Chunk contributes no geometry: all units reliably duplicated" << std::endl;
+				continue;
+			}
 
-			if (chunk_id == 0)
+			if (root->children.empty())
 			{
 				root->bounds = chunkRoot->bounds;
 			}
@@ -235,11 +282,14 @@ int main(int argc, char* argv[])
 			}
 			root->depth = std::max(root->depth, chunkRoot->depth + 1);
 			root->children.push_back(chunkRoot);
-			root->merged.push_back(chunkRoot->merged[0]);
+			root->merged.push_back(chunkRoot->merged.empty()
+				? gaussians.at(chunkRoot->leaf_indices.at(0)) : chunkRoot->merged[0]);
 			root->bounds.maxx[3] = 1e9f;
 			root->bounds.minn[3] = 1e9f;
 		}
-		if (chunk_count > 1) {
+		if (root->children.empty() || gaussians.empty())
+			throw std::runtime_error("Merged scene contains no Gaussian leaves");
+		if (root->children.size() > 1) {
 			Gaussian gaussian = AvgMerger::mergeGaussians(root->merged);
 			root->merged.clear();
 			root->merged.emplace_back(gaussian);

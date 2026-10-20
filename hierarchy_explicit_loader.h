@@ -22,9 +22,11 @@ class HierarchyExplicitLoader
 {
 public:
 
-	static void loadExplicit(const char* filename,
+	// Returns false only for a legitimate, wholly excluded spatial contribution.
+	static bool loadExplicit(const char* filename,
 		std::vector<Gaussian>& gaussian, ExplicitTreeNode* root,
 		int chunk_id, std::vector<Eigen::Vector3f>& chunk_centers,
 		const std::unordered_set<int>* excluded_nodes = nullptr,
-		bool route_ownership = false);
+		bool route_ownership = false,
+		bool spatial_ownership = false);
 };

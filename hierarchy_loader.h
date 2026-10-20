@@ -29,7 +29,8 @@ public:
 		std::vector<Eigen::Vector3f>& scales,
 		std::vector<Eigen::Vector4f>& rot,
 		std::vector<Node>& nodes,
-		std::vector<Box>& boxes);
+		std::vector<Box>& boxes,
+		bool validate_topology = false);
 
 	static bool loadAdaptiveUnits(const char* filename,
 		float target_extent,
@@ -38,5 +39,12 @@ public:
 		int& selected_depth,
 		std::string& error,
 		int requested_depth = -1);
+
+	// A disjoint frontier, including shallow leaves, covering every stored leaf exactly once.
+	static bool loadSpatialFrontier(const char* filename,
+		float target_extent,
+		std::vector<int>& node_ids,
+		std::vector<Box>& unit_boxes,
+		std::string& error);
 	
 };

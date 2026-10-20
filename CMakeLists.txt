@@ -33,6 +33,7 @@ add_library (GaussianHierarchy
  rotation_aligner.cpp
  merger_policy.h
  merger_policy.cpp
+ spatial_metadata.cpp
  half.hpp
  types.h)
 target_include_directories(GaussianHierarchy PRIVATE dependencies/eigen)
@@ -105,5 +106,16 @@ if(BUILD_TESTING)
  set_property(TARGET test_merger_policy PROPERTY CXX_STANDARD 17)
  target_link_libraries(test_merger_policy PRIVATE GaussianHierarchy)
  add_test(NAME merger_policy COMMAND test_merger_policy)
+ foreach(spatial_test spatial_policy spatial_hierarchy)
+  add_executable(test_${spatial_test} tests/test_${spatial_test}.cpp)
+  target_include_directories(test_${spatial_test} PRIVATE dependencies/eigen)
+  set_property(TARGET test_${spatial_test} PROPERTY CXX_STANDARD 17)
+  target_link_libraries(test_${spatial_test} PRIVATE GaussianHierarchy)
+  target_compile_definitions(test_${spatial_test} PRIVATE
+   SPATIAL_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/spatial_partition.json")
+  add_test(NAME ${spatial_test} COMMAND test_${spatial_test})
+ endforeach()
+ target_compile_definitions(test_spatial_hierarchy PRIVATE
+  SPATIAL_MERGER_PATH="$<TARGET_FILE:GaussianHierarchyMerger>")
+ add_dependencies(test_spatial_hierarchy GaussianHierarchyMerger)
 endif()
-

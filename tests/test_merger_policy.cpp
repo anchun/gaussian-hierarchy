@@ -1,6 +1,7 @@
 #include "merger_policy.h"
 #include <cmath>
 #include <fstream>
+#include <filesystem>
 #include <stdexcept>
 #include <vector>
 
@@ -35,6 +36,14 @@ void require(bool condition, const char* message)
 
 int main()
 {
+	struct Cleanup
+	{
+		~Cleanup()
+		{
+			for (const char* name : {"route0", "route1", "legacy_auto", "prior", "cameras"})
+				std::filesystem::remove(std::string("test_merger_policy_") + name + ".json");
+		}
+	} cleanup;
 	std::vector<Gaussian> scaffold;
 	scaffold.push_back(makeSky(0.f));
 	for (int index = 0; index < 7; ++index)
@@ -54,8 +63,8 @@ int main()
 	require(scaffold[8].scale == anomaly_scale, "sky repair changed scale");
 	require(scaffold[8].opacity == anomaly_opacity, "sky repair changed opacity");
 
-	const std::string route0_path = "/tmp/test_merger_policy_route0.json";
-	const std::string route1_path = "/tmp/test_merger_policy_route1.json";
+	const std::string route0_path = "test_merger_policy_route0.json";
+	const std::string route1_path = "test_merger_policy_route1.json";
 	{
 		std::ofstream file(route0_path);
 		file << R"({"route_mode":"corridor","route_mode_requested":"corridor","route_closed":false,"route_ambiguous":false,"route_start_m":0,"route_end_m":582,"overlap_m":50,"context_distance_m":200,"context_frame_stride":5,"route_axis_xy":[1,0],"route_origin_xy":[0,0]})";
@@ -72,7 +81,7 @@ int main()
 	require(!route0.ambiguous && !route1.ambiguous, "explicit corridor route was marked ambiguous");
 	require(route0.explicitly_requested && route1.explicitly_requested,
 		"explicit corridor request was not preserved");
-	const std::string legacy_auto_path = "/tmp/test_merger_policy_legacy_auto.json";
+	const std::string legacy_auto_path = "test_merger_policy_legacy_auto.json";
 	{
 		std::ofstream file(legacy_auto_path);
 		file << R"({"route_mode":"corridor","route_mode_requested":"auto","route_closed":false,"route_start_m":0,"route_end_m":582,"overlap_m":50,"context_distance_m":200,"context_frame_stride":5,"route_axis_xy":[1,0],"route_origin_xy":[0,0]})";
@@ -87,7 +96,7 @@ int main()
 	require(close(transition.start, 532.f), "route transition start is incorrect");
 	require(close(transition.end, 632.f), "route transition end is incorrect");
 
-	const std::string prior_path = "/tmp/test_merger_policy_prior.json";
+	const std::string prior_path = "test_merger_policy_prior.json";
 	{
 		std::ofstream file(prior_path);
 		file << R"({"road_points":10,"skybox_points":2,"fixed_prior_points":12})";
@@ -98,7 +107,7 @@ int main()
 	require(prior.skybox_points == 2, "sky prior count is incorrect");
 	require(prior.fixed_prior_points == 12, "fixed prior count is incorrect");
 	require(!loadPriorInfo(prior_path, 11, prior, error), "out-of-range prior metadata was accepted");
-	const std::string cameras_path = "/tmp/test_merger_policy_cameras.json";
+	const std::string cameras_path = "test_merger_policy_cameras.json";
 	{
 		std::ofstream file(cameras_path);
 		file << R"([{"img_name":"front/0010.jpg","position":[10,0,0],"rotation":[[1,0,0],[0,1,0],[0,0,1]],"fx":1000,"fy":1000,"width":1000,"height":1000},{"img_name":"front/0011.jpg","position":[700,0,0],"rotation":[[1,0,0],[0,1,0],[0,0,1]],"fx":1000,"fy":1000,"width":1000,"height":1000}])";

@@ -45,6 +45,65 @@ struct OwnershipUnit
 	Box bounds;
 };
 
+struct SpatialPartitionNode
+{
+	int axis = -1;
+	double cut = 0.;
+	int left = -1;
+	int right = -1;
+	int chunk_id = -1;
+};
+
+struct SpatialChunkInfo
+{
+	bool spatial = false;
+	int chunk_count = 0;
+	int chunk_id = -1;
+	std::string partition_id;
+	std::string selection_id;
+	std::vector<SpatialPartitionNode> tree;
+	std::unordered_set<std::string> core_frame_names;
+	double overlap = 0.;
+	double context_distance = 0.;
+	double target_chunk_size = 0.;
+	int context_frame_stride = 1;
+	std::string metadata;
+};
+
+struct SpatialOwnershipStats
+{
+	std::size_t units = 0;
+	std::size_t matched_pairs = 0;
+	std::size_t unmatched_units = 0;
+	std::size_t excluded_units = 0;
+	std::size_t uncertain_units = 0;
+};
+
+struct SpatialOwnershipPlan
+{
+	std::vector<std::unordered_set<int>> excluded_nodes;
+	SpatialOwnershipStats stats;
+};
+
+// Missing metadata is legacy only when neither source nor training has spatial markers.
+bool loadSpatialChunkInfo(const std::string& path, SpatialChunkInfo& info, std::string& error);
+bool validateSpatialTraining(
+	const std::string& source_directory, const std::string& trained_directory,
+	SpatialChunkInfo& info, std::string& error);
+bool validateSpatialChunkSet(
+	const std::vector<std::string>& source_directories,
+	const std::vector<std::string>& trained_directories,
+	std::vector<SpatialChunkInfo>& infos, bool& spatial, std::string& error);
+int spatialOwner(const SpatialChunkInfo& info, const Eigen::Vector2d& position);
+float spatialOwnershipExtent(const SpatialChunkInfo& info);
+bool loadSpatialCameraSupport(
+	const std::string& path, const SpatialChunkInfo& info,
+	std::vector<CameraSupport>& cameras, std::string& error);
+SpatialOwnershipPlan buildSpatialOwnership(
+	const std::vector<std::vector<OwnershipUnit>>& units,
+	const std::vector<SpatialChunkInfo>& infos,
+	const std::vector<std::vector<CameraSupport>>& cameras);
+
 struct RouteOwnershipStats
 {
 	std::size_t left_units = 0;
