@@ -22,7 +22,6 @@
 #include <filesystem>
 #include "appearance_filter.h"
 #include "rotation_aligner.h"
-#include "merger_policy.h"
 
 void recTraverse(ExplicitTreeNode* node, int& zerocount)
 {
@@ -39,13 +38,8 @@ void recTraverse(ExplicitTreeNode* node, int& zerocount)
 
 int main(int argc, char* argv[])
 {
-	if (argc < 4)
-		throw std::runtime_error("Failed to pass args <plyfile> <source dir> <trained dir> [scaffold dir]");
-
-	SpatialChunkInfo spatial_info;
-	std::string spatial_error;
-	if (!validateSpatialTraining(argv[2], argv[3], spatial_info, spatial_error))
-		throw std::runtime_error(spatial_error);
+	if (argc < 3)
+		throw std::runtime_error("Failed to pass args <plyfile> <source dir> [scaffold dir]");
 
 	int skyboxpoints = 0;
 	if (argc > 4)
@@ -146,8 +140,6 @@ int main(int argc, char* argv[])
 	}
 
 	gaussians.resize(valid);
-	if (spatial_info.spatial && gaussians.empty())
-		throw std::runtime_error("Empty source Gaussian cloud for spatial hierarchy");
 
 	std::cout << "Generating" << std::endl;
 

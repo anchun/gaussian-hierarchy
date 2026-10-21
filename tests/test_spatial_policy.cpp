@@ -1,6 +1,5 @@
-#include "merger_policy.h"
+#include "spatial_merge.h"
 #include "dependencies/json.hpp"
-#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -24,13 +23,6 @@ void writeJson(const fs::path& path, const json& value)
 	std::ofstream file(path);
 	file << value.dump(2);
 	require(file.good(), "failed to write test metadata");
-}
-
-OwnershipUnit unit(int id, float x, float y = 0.f, float z = 10.f, float width = 0.4f)
-{
-	const Eigen::Vector3f center(x, y, z);
-	const Eigen::Vector3f half = Eigen::Vector3f::Constant(width / 2.f);
-	return {id, Box(center - half, center + half)};
 }
 
 struct TestFiles
@@ -63,6 +55,24 @@ int main()
 	}
 	require(spatialOwner(info, Eigen::Vector2d(std::nextafter(0., -1.), 10.)) == 0,
 		"double-precision split boundary was rounded");
+	json rotated = fixture;
+	rotated["partition_frame"] = fixture.at("rotated_frame");
+	writeJson(path, rotated);
+	SpatialChunkInfo rotated_info;
+	require(loadSpatialChunkInfo(path.string(), rotated_info, error) && rotated_info.rotated, error);
+	for (const json& item : fixture.at("rotated_owner_cases"))
+	{
+		Eigen::Vector2d xy(item["xy"][0].get<double>(), item["xy"][1].get<double>());
+		require(spatialOwner(rotated_info, xy) == item["owner"].get<int>(),
+			"shared Python/C++ rotated-frame ownership differs");
+	}
+	for (const json& frame : {json{{"axis_xy", {1.0, 1.0}}}, json{{"axis_xy", {1.0}}}, json{{"axis", {1.0, 0.0}}}})
+	{
+		rotated["partition_frame"] = frame;
+		writeJson(path, rotated);
+		require(!loadSpatialChunkInfo(path.string(), rotated_info, error), "invalid partition frame accepted");
+	}
+	writeJson(path, fixture);
 	bool rejected_position = false;
 	try { spatialOwner(info, Eigen::Vector2d(std::numeric_limits<double>::infinity(), 0.)); }
 	catch (const std::exception&) { rejected_position = true; }
@@ -131,7 +141,8 @@ int main()
 		[](json& j) { j["partition_id"] = std::string(64, 'c'); },
 		[](json& j) { j["partition_tree"][2]["cut"] = 11.; },
 		[](json& j) { j["overlap_m"] = 6.; },
-		[](json& j) { j["core_frame_names"] = {"0.jpg"}; }
+		[](json& j) { j["core_frame_names"] = {"0.jpg"}; },
+		[](json& j) { j["partition_frame"] = {{"axis_xy", {0.6, 0.8}}}; }
 	})
 	{
 		json changed = documents[2];
@@ -168,88 +179,4 @@ int main()
 	writeJson(fs::path(sources[2]) / "chunk_info.json", documents[2]);
 	writeJson(fs::path(trained[2]) / "chunk_info.json", documents[2]);
 	require(validateSpatialChunkSet(sources, trained, infos, spatial, error), error);
-
-	std::vector<std::vector<CameraSupport>> cameras(3);
-	std::vector<std::vector<OwnershipUnit>> units{{unit(10, -5)}, {unit(20, -5)}, {unit(30, -5)}};
-	SpatialOwnershipPlan plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.stats.matched_pairs == 3 && plan.stats.excluded_units == 2,
-		"three-way duplicates did not keep exactly one representative");
-	require(plan.excluded_nodes[0].empty() && plan.excluded_nodes[1].count(20) && plan.excluded_nodes[2].count(30),
-		"actual BSP core owner not preferred");
-	for (auto& chunk : units)
-		chunk.front().bounds = unit(0, 5, 20).bounds;
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.excluded_nodes[2].empty() && plan.excluded_nodes[0].count(10) && plan.excluded_nodes[1].count(20),
-		"third chunk core owner was removed");
-	std::reverse(units.begin(), units.end());
-	std::reverse(infos.begin(), infos.end());
-	SpatialOwnershipPlan reversed = buildSpatialOwnership(units, infos, cameras);
-	for (int chunk = 0; chunk < 3; ++chunk)
-		require(reversed.excluded_nodes[2 - chunk] == plan.excluded_nodes[chunk],
-			"chunk ordering changed spatial decisions");
-	std::reverse(infos.begin(), infos.end());
-
-	units = {{unit(10, -5)}, {unit(20, 5)}, {unit(30, 5, 20)}};
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.stats.matched_pairs == 0 && plan.stats.excluded_units == 0
-		&& plan.stats.unmatched_units == 3, "zero-match spatial units were removed");
-	units = {{unit(10, -5)}, {unit(20, -5), unit(21, -20)}, {unit(30, 20)}};
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.stats.unmatched_units == 2 && plan.stats.excluded_units == 1
-		&& !plan.excluded_nodes[1].count(21) && !plan.excluded_nodes[2].count(30),
-		"unmatched unit retention is not 100%");
-
-	// A-B and B-C overlap >=90%, but A-C does not. An endpoint owner may remove B, never C.
-	units = {{unit(10, -5)}, {unit(20, -4.97f)}, {unit(30, -4.94f)}};
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.stats.matched_pairs == 2 && plan.stats.excluded_units == 1
-		&& plan.excluded_nodes[1].count(20) && plan.excluded_nodes[2].empty(),
-		"transitive chain incorrectly removed a nonmatching copy");
-
-	units = {{unit(10, 5)}, {}, {unit(30, 5)}};
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.excluded_nodes[0].empty() && plan.excluded_nodes[2].count(30),
-		"missing core owner did not choose a real deterministic candidate");
-	CameraSupport visible;
-	visible.position = Eigen::Vector3f(5, 0, 0);
-	visible.fx = visible.fy = 1000;
-	visible.width = visible.height = 1000;
-	visible.core = true;
-	cameras[2].push_back(visible);
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.excluded_nodes[0].count(10) && plan.excluded_nodes[2].empty(),
-		"missing core owner did not use camera support");
-	units = {{unit(10, 0)}, {unit(20, 0)}, {}};
-	cameras.assign(3, {});
-	cameras[0].push_back(visible);
-	cameras[0][0].position.x() = 0;
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.excluded_nodes[0].empty() && plan.excluded_nodes[1].count(20),
-		"boundary camera arbitration failed");
-
-	cameras.assign(3, {});
-	units = {{unit(10, -5), unit(11, -5.01f)}, {unit(20, -5)}, {}};
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.stats.matched_pairs == 1 && plan.stats.unmatched_units == 1
-		&& !plan.excluded_nodes[0].count(11), "non-reciprocal unit was discarded");
-	units = {{unit(10, -5, 0, 10, 100)}, {unit(20, -5, 0, 10, 100)}, {}};
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.stats.uncertain_units == 2 && plan.stats.excluded_units == 0,
-		"uncertain oversized units were discarded");
-	units = {{unit(10, 100000)}, {unit(20, 100000)}, {}};
-	units[0][0].bounds.minn.x() = units[0][0].bounds.maxx.x() = std::numeric_limits<float>::infinity();
-	units[1][0].bounds = units[0][0].bounds;
-	plan = buildSpatialOwnership(units, infos, cameras);
-	require(plan.stats.uncertain_units == 2 && plan.stats.excluded_units == 0,
-		"half-overflowed distant boxes were matched or discarded");
-
-	const fs::path camera_path = files.directory / "cameras.json";
-	writeJson(camera_path, json::array({{
-		{"img_name", "front/0.jpg"}, {"position", {0, 0, 0}},
-		{"rotation", {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}},
-		{"fx", 1000}, {"fy", 1000}, {"width", 1000}, {"height", 1000}
-	}}));
-	std::vector<CameraSupport> support;
-	require(loadSpatialCameraSupport(camera_path.string(), infos[0], support, error)
-		&& support.size() == 1 && support[0].core, "spatial rig camera support classification failed");
 }

@@ -31,9 +31,9 @@ add_library (GaussianHierarchy
  runtime_switching.cu
  rotation_aligner.h
  rotation_aligner.cpp
- merger_policy.h
- merger_policy.cpp
+ spatial_merge.h
  spatial_metadata.cpp
+ spatial_ply_merge.cpp
  half.hpp
  types.h)
 target_include_directories(GaussianHierarchy PRIVATE dependencies/eigen)
@@ -101,11 +101,6 @@ target_link_libraries(GaussianPlyLODGenerator PUBLIC GaussianHierarchy)
 
 include(CTest)
 if(BUILD_TESTING)
- add_executable(test_merger_policy tests/test_merger_policy.cpp)
- target_include_directories(test_merger_policy PRIVATE dependencies/eigen)
- set_property(TARGET test_merger_policy PROPERTY CXX_STANDARD 17)
- target_link_libraries(test_merger_policy PRIVATE GaussianHierarchy)
- add_test(NAME merger_policy COMMAND test_merger_policy)
  foreach(spatial_test spatial_policy spatial_hierarchy)
   add_executable(test_${spatial_test} tests/test_${spatial_test}.cpp)
   target_include_directories(test_${spatial_test} PRIVATE dependencies/eigen)

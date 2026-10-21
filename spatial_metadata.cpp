@@ -1,4 +1,4 @@
-#include "merger_policy.h"
+#include "spatial_merge.h"
 #include "dependencies/json.hpp"
 #include <algorithm>
 #include <cmath>
@@ -87,6 +87,18 @@ bool loadSpatialChunkInfo(const std::string& path, SpatialChunkInfo& info, std::
 			if (name.empty() || std::filesystem::path(name).filename().string() != name
 				|| !info.core_frame_names.insert(name).second)
 				throw std::runtime_error("invalid or repeated core frame name");
+		}
+		if (value.contains("partition_frame"))
+		{
+			const json& frame = value.at("partition_frame");
+			if (!frame.is_object() || frame.size() != 1 || !frame.at("axis_xy").is_array()
+				|| frame.at("axis_xy").size() != 2)
+				throw std::runtime_error("invalid spatial partition frame");
+			info.axis = Eigen::Vector2d(number(frame.at("axis_xy")[0], "axis_xy"),
+				number(frame.at("axis_xy")[1], "axis_xy"));
+			if (std::abs(info.axis.norm() - 1.) > 1e-9)
+				throw std::runtime_error("spatial partition axis must be a unit vector");
+			info.rotated = true;
 		}
 		const json& tree = value.at("partition_tree");
 		if (!tree.is_array() || tree.size() != static_cast<std::size_t>(2 * info.chunk_count - 1))
@@ -222,6 +234,12 @@ bool validateSpatialChunkSet(
 				return false;
 			}
 		}
+		if (value.contains("partition_frame") != reference.contains("partition_frame")
+			|| (value.contains("partition_frame") && value.at("partition_frame") != reference.at("partition_frame")))
+		{
+			error = "inconsistent spatial partition_frame";
+			return false;
+		}
 		for (const std::string& frame : info.core_frame_names)
 		{
 			if (!frames.insert(frame).second)
@@ -238,18 +256,17 @@ int spatialOwner(const SpatialChunkInfo& info, const Eigen::Vector2d& position)
 {
 	if (!info.spatial || info.tree.empty() || !position.allFinite())
 		throw std::runtime_error("spatial ownership requires validated metadata and finite XY");
+	// Same operation order as preprocess/spatial_chunks.py partition_xy.
+	const double x = position.x(), y = position.y(), ax = info.axis.x(), ay = info.axis.y();
+	const Eigen::Vector2d xy = info.rotated
+		? Eigen::Vector2d(ax * x + ay * y, -ay * x + ax * y) : position;
 	int index = 0;
 	for (std::size_t steps = 0; steps < info.tree.size(); ++steps)
 	{
 		const SpatialPartitionNode& node = info.tree.at(index);
 		if (node.chunk_id >= 0)
 			return node.chunk_id;
-		index = position[node.axis] < node.cut ? node.left : node.right;
+		index = xy[node.axis] < node.cut ? node.left : node.right;
 	}
 	throw std::runtime_error("invalid spatial ownership tree");
-}
-
-float spatialOwnershipExtent(const SpatialChunkInfo& info)
-{
-	return static_cast<float>(std::clamp(info.overlap / 5., 1., 10.));
 }
